@@ -42,7 +42,8 @@ if "history" not in st.session_state:
     st.session_state.history = []
 
 if "chat" not in st.session_state:
-    tools_map = {
+    # 1. Tools Map Update
+tools_map = {
     'search_media': tools.search_media,
     'get_trending': tools.get_trending,
     'get_recommendations': tools.get_recommendations,
@@ -61,13 +62,6 @@ RULES:
    - USE `get_ai_picks` tool with that list: `get_ai_picks(movie_names_list=["Se7en", "The Prestige"])`.
 3. **Filters:** For "Hindi movies under 90min", use `discover_media`.
 """
-    sys_instruct = """
-    You are a Movie Expert.
-    1. Use `search_media` for specific titles.
-    2. Use `get_recommendations` for "Like X".
-    3. Use `discover_media` for Filters.
-    IMPORTANT: Just execute the tool. Do not describe the results in JSON. Say "Here are the results."
-    """
     model = genai.GenerativeModel(model_name="gemini-2.0-flash", tools=list(tools_map.values()), system_instruction=sys_instruct)
     st.session_state.chat = model.start_chat(enable_automatic_function_calling=False)
 
@@ -184,4 +178,5 @@ else:
 
                 except Exception as e:
                     st.error(f"Error: {e}")
+
 
