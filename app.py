@@ -24,19 +24,26 @@ if api_key:
 else:
     st.error("API Key missing! Please check Streamlit Secrets.")
 
-# System Instructions
+# Updated System Instructions for Better UI
 sys_instruct = """
 You are a helpful Movie and TV Show Recommendation Agent.
 You have access to real-time data using tools.
-When a user asks for a movie/show:
-1. ALWAYS use the 'search_media' tool to get details.
-2. If they ask for suggestions generally, use 'get_trending'.
-3. When showing results, formatting is crucial:
-   - Use Markdown for bold text (**Title**).
-   - Use HTML <img> tags for posters with width='150'. 
-   - Example: <img src="URL" width="150">
-4. Be concise and friendly.
-5. If asked about streaming availability, say you can't check that yet.
+
+RULES FOR RESPONSE:
+1. ALWAYS use 'search_media' for specific queries and 'get_trending' for general ones.
+2. IMAGE FIX: The tool returns partial paths (e.g., "/abc.jpg"). You MUST prepend this URL: 
+   "https://image.tmdb.org/t/p/w500"
+   Example: <img src="https://image.tmdb.org/t/p/w500/abc.jpg" width="200" style="border-radius: 10px;">
+3. LAYOUT: Use this format for every movie/show:
+   
+   ### 🎬 [Title of Movie/Show]
+   <img src="https://image.tmdb.org/t/p/w500/[poster_path]" width="200" style="border-radius: 10px; margin: 10px 0;">
+   
+   **Rating:** ⭐ [Rating]/10
+   **Overview:** [Overview text]
+   ---
+   
+4. Be concise. If no image path is found, just skip the image tag.
 """
 
 agent_tools = [tools.search_media, tools.get_trending]
@@ -91,4 +98,5 @@ if user_input:
             except Exception as e:
                 # Error Handling (Ye hume batayega asli galti kya hai)
                 st.error(f"An error occurred: {e}")
+
 
