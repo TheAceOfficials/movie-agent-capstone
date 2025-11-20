@@ -7,14 +7,17 @@ import time
 # --- 1. CONFIG & STYLING ---
 st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide")
 
-# Dark Mode & Premium Card Styling
 st.markdown("""
 <style>
     .stApp {background-color: #0e1117;}
-    div[data-testid="stImage"] {transition: transform 0.2s; border-radius: 10px; overflow: hidden;}
-    div[data-testid="stImage"]:hover {transform: scale(1.03); cursor: pointer;}
-    .movie-title {font-weight: bold; font-size: 16px; margin-top: 5px; color: #fff;}
+    /* Movie Card Styling */
+    div[data-testid="stImage"] {border-radius: 10px; overflow: hidden;}
+    .movie-title {font-weight: bold; font-size: 15px; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
     .movie-meta {font-size: 12px; color: #aaa;}
+    
+    /* Detail Page Styling */
+    .detail-title {font-size: 40px; font-weight: bold; color: #E50914;}
+    .tag {background-color: #333; padding: 5px 10px; border-radius: 20px; font-size: 12px; margin-right: 5px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -30,99 +33,141 @@ except:
 if api_key:
     genai.configure(api_key=api_key)
 
-# --- 3. FUNCTION HANDLER (The Brain) ---
-# Hum tools ko "Dictionary" format mai convert kar rahe hain manual handling ke liye
-tools_map = {
-    'search_media': tools.search_media,
-    'get_trending': tools.get_trending,
-    'get_recommendations': tools.get_recommendations,
-    'discover_media': tools.discover_media
-}
+# --- 3. SESSION STATE INITIALIZATION ---
+# Ye track karega ki hum Grid par hain ya Detail page par
+if "selected_movie" not in st.session_state:
+    st.session_state.selected_movie = None # Initially koi movie select nahi hai
 
-# System Instruction: Agent ko batana ki kab kya use karna hai
-sys_instruct = """
-You are a Movie Expert.
-1. Use `search_media` for specific titles ("Inception").
-2. Use `get_recommendations` for "Movies like X". First find X's ID via search, then recommend.
-3. Use `discover_media` for Filters (Hindi, Runtime < 90min).
-   - For "Hindi", use language='hi'.
-   - For "Upcoming/Future", set include_upcoming=True. Otherwise keep it False.
-   
-IMPORTANT: When a tool returns data, do NOT output the JSON. Just say "Here are the top picks:" and let the UI handle the images.
-"""
+if "history" not in st.session_state:
+    st.session_state.history = []
 
 if "chat" not in st.session_state:
-    model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash", # Ya 1.5-flash agar error aaye
-        tools=list(tools_map.values()),
-        system_instruction=sys_instruct
-    )
-    st.session_state.chat = model.start_chat(enable_automatic_function_calling=False) # Manual Mode ON
-    st.session_state.history = [] # Custom History store karenge
+    tools_map = {
+        'search_media': tools.search_media,
+        'get_trending': tools.get_trending,
+        'get_recommendations': tools.get_recommendations,
+        'discover_media': tools.discover_media
+    }
+    sys_instruct = """
+    You are a Movie Expert.
+    1. Use `search_media` for specific titles.
+    2. Use `get_recommendations` for "Like X".
+    3. Use `discover_media` for Filters.
+    IMPORTANT: Just execute the tool. Do not describe the results in JSON. Say "Here are the results."
+    """
+    model = genai.GenerativeModel(model_name="gemini-2.0-flash", tools=list(tools_map.values()), system_instruction=sys_instruct)
+    st.session_state.chat = model.start_chat(enable_automatic_function_calling=False)
 
-# --- 4. UI LAYOUT ---
-st.title("🍿 AI Entertainment Hub")
+# --- 4. FUNCTIONS FOR UI ---
 
-# Display History
-for msg in st.session_state.history:
-    with st.chat_message(msg["role"]):
-        if msg["type"] == "text":
-            st.markdown(msg["content"])
-        elif msg["type"] == "grid":
-            # PREMIUM GRID RENDERER
-            cols = st.columns(4)
-            for idx, item in enumerate(msg["content"]):
-                with cols[idx % 4]:
-                    st.image(item['poster_url'], use_container_width=True)
-                    st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='movie-meta'>⭐ {item['rating']} | 📅 {item['date']}</div>", unsafe_allow_html=True)
+def show_details_page():
+    """ Renders the Single Movie Detail View """
+    movie = st.session_state.selected_movie
+    
+    # Back Button
+    if st.button("← Back to Search"):
+        st.session_state.selected_movie = None
+        st.rerun()
 
-# --- 5. MAIN LOGIC LOOP ---
-user_input = st.chat_input("Search movies, actors, or recommendations...")
+    # Layout: Left (Poster) | Right (Info)
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        if movie['poster_url']:
+            st.image(movie['poster_url'], use_container_width=True)
+            
+    with col2:
+        st.markdown(f"<div class='detail-title'>{movie['title']}</div>", unsafe_allow_html=True)
+        st.markdown(f"⭐ **{movie['rating']}** | 📅 **{movie['date']}** | ⏳ **{movie['runtime']}**")
+        
+        # Genres Tags
+        if movie['genres']:
+            tags_html = "".join([f"<span class='tag'>{g}</span>" for g in movie['genres']])
+            st.markdown(f"<div style='margin: 10px 0;'>{tags_html}</div>", unsafe_allow_html=True)
+            
+        st.write(f"**Overview:** {movie['overview']}")
+        
+        st.divider()
+        
+        # Statistics
+        c1, c2 = st.columns(2)
+        c1.metric("Budget", movie['budget'])
+        c2.metric("Revenue", movie['revenue'])
+        
+        st.divider()
+        
+        # OTT Availability
+        st.subheader("📺 Where to Watch (India)")
+        if movie['ott']:
+            st.success(f"Available on: {', '.join(movie['ott'])}")
+        else:
+            st.warning("Not streaming on major platforms in India right now.")
 
-if user_input:
-    # 1. User ka msg dikhao
-    st.session_state.history.append({"role": "user", "type": "text", "content": user_input})
-    with st.chat_message("user"):
-        st.markdown(user_input)
+    # Trailer Section
+    if movie['trailer_url']:
+        st.divider()
+        st.subheader("🎥 Official Trailer")
+        st.video(movie['trailer_url'])
 
-    # 2. Gemini se baat karo
-    with st.chat_message("assistant"):
-        with st.spinner("Searching..."):
-            try:
-                # Step A: Send message
-                response = st.session_state.chat.send_message(user_input)
-                part = response.candidates[0].content.parts[0]
 
-                # Step B: Check if Gemini wants to run a TOOL
-                if part.function_call:
-                    fn_name = part.function_call.name
-                    fn_args = dict(part.function_call.args)
+# --- 5. MAIN APP LOGIC ---
+
+if st.session_state.selected_movie:
+    # --- VIEW MODE: DETAILS PAGE ---
+    show_details_page()
+
+else:
+    # --- VIEW MODE: CHAT & GRID ---
+    st.title("🍿 AI Entertainment Hub")
+
+    # History Loop
+    for msg in st.session_state.history:
+        with st.chat_message(msg["role"]):
+            if msg["type"] == "text":
+                st.markdown(msg["content"])
+            elif msg["type"] == "grid":
+                cols = st.columns(4)
+                for idx, item in enumerate(msg["content"]):
+                    with cols[idx % 4]:
+                        st.image(item['poster_url'], use_container_width=True)
+                        st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
+                        # THE MAGIC BUTTON
+                        if st.button("View Details", key=f"btn_{item['id']}_{idx}"):
+                            # Fetch Full Details NOW
+                            full_details = tools.get_media_details(item['id'], item['type'])
+                            st.session_state.selected_movie = full_details
+                            st.rerun()
+
+    # Input Box
+    user_input = st.chat_input("Search movies, actors, or recommendations...")
+
+    if user_input:
+        st.session_state.history.append({"role": "user", "type": "text", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Searching..."):
+                try:
+                    tools_map = {'search_media': tools.search_media, 'get_trending': tools.get_trending, 'get_recommendations': tools.get_recommendations, 'discover_media': tools.discover_media}
                     
-                    # Execute Python Function
-                    if fn_name in tools_map:
-                        data = tools_map[fn_name](**fn_args) # Asli Tool Chala
+                    response = st.session_state.chat.send_message(user_input)
+                    part = response.candidates[0].content.parts[0]
+
+                    if part.function_call:
+                        fn_name = part.function_call.name
+                        fn_args = dict(part.function_call.args)
                         
-                        # Step C: Show GRID (No JSON Text!)
-                        if data:
-                            st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
-                            # Grid abhi render karo
-                            cols = st.columns(4)
-                            for idx, item in enumerate(data):
-                                with cols[idx % 4]:
-                                    st.image(item['poster_url'], use_container_width=True)
-                                    st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
-                                    st.markdown(f"<div class='movie-meta'>⭐ {item['rating']} | 📅 {item['date']}</div>", unsafe_allow_html=True)
-                            
-                            # Gemini ko simple text bhej do ki kaam ho gaya
-                            st.session_state.chat.send_message("I have displayed the results in a grid.")
-                        else:
-                            st.error("No results found for filters.")
-                else:
-                    # Step D: Agar normal text hai (Hi/Hello)
-                    st.markdown(response.text)
-                    st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
+                        if fn_name in tools_map:
+                            data = tools_map[fn_name](**fn_args)
+                            if data:
+                                st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
+                                st.rerun() # Rerun to show grid immediately
+                            else:
+                                st.error("No results found.")
+                    else:
+                        st.markdown(response.text)
+                        st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
 
-            except Exception as e:
-                st.error(f"Error: {e}")
-
+                except Exception as e:
+                    st.error(f"Error: {e}")
