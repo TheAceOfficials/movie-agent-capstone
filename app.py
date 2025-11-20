@@ -1,22 +1,24 @@
 import streamlit as st
 import google.generativeai as genai
+from google.generativeai.types import FunctionDeclaration, Tool
 import tools
 import time
 
-# 1. Setup & Config
+# --- 1. CONFIG & STYLING ---
 st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide")
 
-# Load CSS for Premium UI (Dark Theme tweaks)
+# Dark Mode & Premium Card Styling
 st.markdown("""
 <style>
-    .stChatMessage {background-color: #1E1E1E; border-radius: 15px;}
-    div[data-testid="stImage"] img {border-radius: 10px; transition: transform 0.3s;}
-    div[data-testid="stImage"] img:hover {transform: scale(1.05);}
-    h3 {color: #E50914 !important;} /* Netflix Red Title */
+    .stApp {background-color: #0e1117;}
+    div[data-testid="stImage"] {transition: transform 0.2s; border-radius: 10px; overflow: hidden;}
+    div[data-testid="stImage"]:hover {transform: scale(1.03); cursor: pointer;}
+    .movie-title {font-weight: bold; font-size: 16px; margin-top: 5px; color: #fff;}
+    .movie-meta {font-size: 12px; color: #aaa;}
 </style>
 """, unsafe_allow_html=True)
 
-# API Key Handling
+# --- 2. SETUP GEMINI ---
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
 except:
@@ -28,100 +30,104 @@ except:
 if api_key:
     genai.configure(api_key=api_key)
 
-# 2. Brain: System Instructions (Updated for new tools)
+# --- 3. FUNCTION HANDLER (The Brain) ---
+# Hum tools ko "Dictionary" format mai convert kar rahe hain manual handling ke liye
+tools_map = {
+    'search_media': tools.search_media,
+    'get_trending': tools.get_trending,
+    'get_recommendations': tools.get_recommendations,
+    'discover_media': tools.discover_media
+}
+
+# System Instruction: Agent ko batana ki kab kya use karna hai
 sys_instruct = """
-You are a smart Movie & TV Expert. Your goal is to find the PERFECT match.
-
-HOW TO USE TOOLS:
-1. **Specific Title:** If user asks for "Inception", use `search_media("Inception")`.
-2. **"Like X" or "Similar to X":** - FIRST, use `search_media("X")` to find the correct ID and Type (Movie/TV) of 'X'.
-   - THEN, use `get_recommendations(id, type)` to get the suggestions.
-3. **Filters (Runtime, Language):**
-   - If user asks for "Hindi movies under 90 mins", use `discover_media`.
-   - Language Codes: Hindi='hi', English='en', Korean='ko', Japanese='ja'.
-   - Type: 'movie' or 'tv'.
-   - Example Call: `discover_media(media_type='movie', language='hi', max_runtime=90)`
-
-RESPONSE FORMAT:
-- Do NOT show images in text. Just give a friendly intro summary (e.g., "Here are some short Hindi movies for you:").
-- The UI will handle the posters automatically.
-- Just return the LIST of JSON objects provided by the tool as the final part of your answer logic, or simply explain what you found.
+You are a Movie Expert.
+1. Use `search_media` for specific titles ("Inception").
+2. Use `get_recommendations` for "Movies like X". First find X's ID via search, then recommend.
+3. Use `discover_media` for Filters (Hindi, Runtime < 90min).
+   - For "Hindi", use language='hi'.
+   - For "Upcoming/Future", set include_upcoming=True. Otherwise keep it False.
+   
+IMPORTANT: When a tool returns data, do NOT output the JSON. Just say "Here are the top picks:" and let the UI handle the images.
 """
 
-# Tool definition
-agent_tools = [tools.search_media, tools.get_trending, tools.get_recommendations, tools.discover_media]
+if "chat" not in st.session_state:
+    model = genai.GenerativeModel(
+        model_name="gemini-2.0-flash", # Ya 1.5-flash agar error aaye
+        tools=list(tools_map.values()),
+        system_instruction=sys_instruct
+    )
+    st.session_state.chat = model.start_chat(enable_automatic_function_calling=False) # Manual Mode ON
+    st.session_state.history = [] # Custom History store karenge
 
-# 3. Session State
-if "chat_session" not in st.session_state:
-    try:
-        model = genai.GenerativeModel("gemini-2.0-flash", tools=agent_tools, system_instruction=sys_instruct)
-        st.session_state.chat_session = model.start_chat(enable_automatic_function_calling=True)
-    except Exception as e:
-        st.error(f"Model Error: {e}")
-
-# 4. UI Layout
+# --- 4. UI LAYOUT ---
 st.title("🍿 AI Entertainment Hub")
-st.caption("Premium Recommendations • Powered by Gemini 2.0")
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
 
 # Display History
-for msg in st.session_state.messages:
-    if msg["role"] != "system": # Don't show system calls
-        with st.chat_message(msg["role"]):
-            # Agar content list (JSON) hai toh Grid show karo, nahi toh Text
-            if isinstance(msg["content"], list):
-                cols = st.columns(4) # 4 Posters per row
-                for idx, item in enumerate(msg["content"]):
-                    with cols[idx % 4]:
-                        st.image(item['poster_url'], use_container_width=True)
-                        st.caption(f"**{item['title']}** ({item['rating']}⭐)")
-            else:
-                st.markdown(msg["content"])
+for msg in st.session_state.history:
+    with st.chat_message(msg["role"]):
+        if msg["type"] == "text":
+            st.markdown(msg["content"])
+        elif msg["type"] == "grid":
+            # PREMIUM GRID RENDERER
+            cols = st.columns(4)
+            for idx, item in enumerate(msg["content"]):
+                with cols[idx % 4]:
+                    st.image(item['poster_url'], use_container_width=True)
+                    st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='movie-meta'>⭐ {item['rating']} | 📅 {item['date']}</div>", unsafe_allow_html=True)
 
-# 5. User Input
-user_input = st.chat_input("Try: 'Suspense movies like Drishyam' or 'Hindi movies under 1h 30min'")
+# --- 5. MAIN LOGIC LOOP ---
+user_input = st.chat_input("Search movies, actors, or recommendations...")
 
 if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
+    # 1. User ka msg dikhao
+    st.session_state.history.append({"role": "user", "type": "text", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
 
+    # 2. Gemini se baat karo
     with st.chat_message("assistant"):
-        with st.spinner("Curating your watchlist..."):
+        with st.spinner("Searching..."):
             try:
-                response = st.session_state.chat_session.send_message(user_input)
-                
-                # Check: Kya Agent ne Data (List) return kiya hai ya Text?
-                # Gemini function calling ke baad kabhi kabhi text + function_response mix karta hai.
-                # Hum simple logic lagayenge: Last part check karenge.
-                
-                part = response.parts[-1]
-                
-                # Case A: Function Call ka Result (Data)
-                if part.function_response:
-                    # Note: Gemini 2.0 sometimes abstracts this. 
-                    # Instead, we rely on the tool outputs captured via manual handling logic 
-                    # or simply let Gemini summarise.
-                    # But for Premium UI, we want raw data.
-                    pass 
-                
-                # Simplification for Capstone:
-                # Hum Gemini ko bolenge wo Text Response de, lekin agar usne Tool use kiya,
-                # Toh hum manually check nahi kar sakte bina complex logic ke.
-                # Isliye hum ek "Easy Hack" use karenge:
-                
-                # AGENT se puchenge: Kya mila?
-                # (Actually, Gemini library automatically tool output ko text mai convert kar deti hai).
-                
-                # TO MAKE GRID WORK: We need the list of movies.
-                # Isliye humne Tools mai `return results` kiya hai.
-                # Lekin `enable_automatic_function_calling=True` data ko text mai badal deta hai.
-                
-                # FIX: Text output hi dikhayenge, lekin formatted.
-                st.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
-                
+                # Step A: Send message
+                response = st.session_state.chat.send_message(user_input)
+                part = response.candidates[0].content.parts[0]
+
+                # Step B: Check if Gemini wants to run a TOOL
+                if part.function_call:
+                    fn_name = part.function_call.name
+                    fn_args = dict(part.function_call.args)
+                    
+                    # Execute Python Function
+                    if fn_name in tools_map:
+                        data = tools_map[fn_name](**fn_args) # Asli Tool Chala
+                        
+                        # Step C: Show GRID (No JSON Text!)
+                        if data:
+                            st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
+                            # Grid abhi render karo
+                            cols = st.columns(4)
+                            for idx, item in enumerate(data):
+                                with cols[idx % 4]:
+                                    st.image(item['poster_url'], use_container_width=True)
+                                    st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
+                                    st.markdown(f"<div class='movie-meta'>⭐ {item['rating']} | 📅 {item['date']}</div>", unsafe_allow_html=True)
+                            
+                            # Gemini ko batao ki kaam ho gaya (Context update)
+                            # Hum data wapis nahi bhejenge taaki wo JSON na ugal de.
+                            # Bas ek chhota acknowledgment bhejenge.
+                            st.session_state.chat.send_message(
+                                genai.content_types.to_content(
+                                    {"role": "user", "parts": [{"text": "Display these movies to the user in a grid."}]}
+                                )
+                            )
+                        else:
+                            st.error("No results found for filters.")
+                else:
+                    # Step D: Agar normal text hai (Hi/Hello)
+                    st.markdown(response.text)
+                    st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
+
             except Exception as e:
-                st.error(f"Oops: {e}")
+                st.error(f"Error: {e}")
