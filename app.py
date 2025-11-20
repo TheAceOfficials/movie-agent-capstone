@@ -45,7 +45,7 @@ agent_tools = [tools.search_media, tools.get_trending]
 if "chat_session" not in st.session_state:
     try:
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-2.0-flash",
             tools=agent_tools,
             system_instruction=sys_instruct
         )
@@ -91,3 +91,4 @@ if user_input:
             except Exception as e:
                 # Error Handling (Ye hume batayega asli galti kya hai)
                 st.error(f"An error occurred: {e}")
+
