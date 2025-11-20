@@ -1,102 +1,127 @@
 import streamlit as st
-import os
 import google.generativeai as genai
-import tools  # Importing tools.py
+import tools
 import time
 
-# 1. API Key Setup (Streamlit Secrets se lega)
-# Agar secrets nahi mile (local run), toh environment variable try karega
-api_key = st.secrets.get("GOOGLE_API_KEY")
-tmdb_key = st.secrets.get("TMDB_API_KEY")
+# 1. Setup & Config
+st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide")
 
-# Fallback for local testing if secrets fail
-if not api_key:
-    # Local testing ke liye dotenv try karte hain
+# Load CSS for Premium UI (Dark Theme tweaks)
+st.markdown("""
+<style>
+    .stChatMessage {background-color: #1E1E1E; border-radius: 15px;}
+    div[data-testid="stImage"] img {border-radius: 10px; transition: transform 0.3s;}
+    div[data-testid="stImage"] img:hover {transform: scale(1.05);}
+    h3 {color: #E50914 !important;} /* Netflix Red Title */
+</style>
+""", unsafe_allow_html=True)
+
+# API Key Handling
+try:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+except:
+    import os
     from dotenv import load_dotenv
     load_dotenv()
     api_key = os.getenv("GOOGLE_API_KEY")
 
-st.set_page_config(page_title="AI Entertainment Agent", page_icon="🎬", layout="wide")
-
-# 2. Gemini Configuration
 if api_key:
     genai.configure(api_key=api_key)
-else:
-    st.error("API Key missing! Please check Streamlit Secrets.")
 
-# Updated System Instructions for Better UI
+# 2. Brain: System Instructions (Updated for new tools)
 sys_instruct = """
-You are a helpful Movie and TV Show Recommendation Agent.
-You have access to real-time data using tools.
+You are a smart Movie & TV Expert. Your goal is to find the PERFECT match.
 
-RULES FOR RESPONSE:
-1. ALWAYS use 'search_media' for specific queries and 'get_trending' for general ones.
-2. IMAGE FIX: The tool returns partial paths (e.g., "/abc.jpg"). You MUST prepend this URL: 
-   "https://image.tmdb.org/t/p/w500"
-   Example: <img src="https://image.tmdb.org/t/p/w500/abc.jpg" width="200" style="border-radius: 10px;">
-3. LAYOUT: Use this format for every movie/show:
-   
-   ### 🎬 [Title of Movie/Show]
-   <img src="https://image.tmdb.org/t/p/w500/[poster_path]" width="200" style="border-radius: 10px; margin: 10px 0;">
-   
-   **Rating:** ⭐ [Rating]/10
-   **Overview:** [Overview text]
-   ---
-   
-4. Be concise. If no image path is found, just skip the image tag.
+HOW TO USE TOOLS:
+1. **Specific Title:** If user asks for "Inception", use `search_media("Inception")`.
+2. **"Like X" or "Similar to X":** - FIRST, use `search_media("X")` to find the correct ID and Type (Movie/TV) of 'X'.
+   - THEN, use `get_recommendations(id, type)` to get the suggestions.
+3. **Filters (Runtime, Language):**
+   - If user asks for "Hindi movies under 90 mins", use `discover_media`.
+   - Language Codes: Hindi='hi', English='en', Korean='ko', Japanese='ja'.
+   - Type: 'movie' or 'tv'.
+   - Example Call: `discover_media(media_type='movie', language='hi', max_runtime=90)`
+
+RESPONSE FORMAT:
+- Do NOT show images in text. Just give a friendly intro summary (e.g., "Here are some short Hindi movies for you:").
+- The UI will handle the posters automatically.
+- Just return the LIST of JSON objects provided by the tool as the final part of your answer logic, or simply explain what you found.
 """
 
-agent_tools = [tools.search_media, tools.get_trending]
+# Tool definition
+agent_tools = [tools.search_media, tools.get_trending, tools.get_recommendations, tools.discover_media]
 
-# 3. Session State Setup
+# 3. Session State
 if "chat_session" not in st.session_state:
     try:
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
-            tools=agent_tools,
-            system_instruction=sys_instruct
-        )
+        model = genai.GenerativeModel("gemini-2.0-flash", tools=agent_tools, system_instruction=sys_instruct)
         st.session_state.chat_session = model.start_chat(enable_automatic_function_calling=True)
     except Exception as e:
-        st.error(f"Error initializing Gemini: {e}")
+        st.error(f"Model Error: {e}")
 
 # 4. UI Layout
-st.title("🎬 AI Entertainment Assistant")
-st.caption("Powered by Google Gemini & TMDB")
+st.title("🍿 AI Entertainment Hub")
+st.caption("Premium Recommendations • Powered by Gemini 2.0")
 
-# Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display Chat History
+# Display History
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"], unsafe_allow_html=True)
+    if msg["role"] != "system": # Don't show system calls
+        with st.chat_message(msg["role"]):
+            # Agar content list (JSON) hai toh Grid show karo, nahi toh Text
+            if isinstance(msg["content"], list):
+                cols = st.columns(4) # 4 Posters per row
+                for idx, item in enumerate(msg["content"]):
+                    with cols[idx % 4]:
+                        st.image(item['poster_url'], use_container_width=True)
+                        st.caption(f"**{item['title']}** ({item['rating']}⭐)")
+            else:
+                st.markdown(msg["content"])
 
-# 5. User Input Handling
-user_input = st.chat_input("Kya dekhna chahte ho aaj? (e.g., 'Movies like Death Note')")
+# 5. User Input
+user_input = st.chat_input("Try: 'Suspense movies like Drishyam' or 'Hindi movies under 1h 30min'")
 
 if user_input:
-    # User Message
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # Agent Response
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner("Curating your watchlist..."):
             try:
-                # Send message to Gemini
                 response = st.session_state.chat_session.send_message(user_input)
                 
-                # Display Result
-                st.markdown(response.text, unsafe_allow_html=True)
+                # Check: Kya Agent ne Data (List) return kiya hai ya Text?
+                # Gemini function calling ke baad kabhi kabhi text + function_response mix karta hai.
+                # Hum simple logic lagayenge: Last part check karenge.
                 
-                # Save to History
+                part = response.parts[-1]
+                
+                # Case A: Function Call ka Result (Data)
+                if part.function_response:
+                    # Note: Gemini 2.0 sometimes abstracts this. 
+                    # Instead, we rely on the tool outputs captured via manual handling logic 
+                    # or simply let Gemini summarise.
+                    # But for Premium UI, we want raw data.
+                    pass 
+                
+                # Simplification for Capstone:
+                # Hum Gemini ko bolenge wo Text Response de, lekin agar usne Tool use kiya,
+                # Toh hum manually check nahi kar sakte bina complex logic ke.
+                # Isliye hum ek "Easy Hack" use karenge:
+                
+                # AGENT se puchenge: Kya mila?
+                # (Actually, Gemini library automatically tool output ko text mai convert kar deti hai).
+                
+                # TO MAKE GRID WORK: We need the list of movies.
+                # Isliye humne Tools mai `return results` kiya hai.
+                # Lekin `enable_automatic_function_calling=True` data ko text mai badal deta hai.
+                
+                # FIX: Text output hi dikhayenge, lekin formatted.
+                st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
-            
+                
             except Exception as e:
-                # Error Handling (Ye hume batayega asli galti kya hai)
-                st.error(f"An error occurred: {e}")
-
-
+                st.error(f"Oops: {e}")
