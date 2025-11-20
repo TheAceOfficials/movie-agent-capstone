@@ -43,11 +43,24 @@ if "history" not in st.session_state:
 
 if "chat" not in st.session_state:
     tools_map = {
-        'search_media': tools.search_media,
-        'get_trending': tools.get_trending,
-        'get_recommendations': tools.get_recommendations,
-        'discover_media': tools.discover_media
-    }
+    'search_media': tools.search_media,
+    'get_trending': tools.get_trending,
+    'get_recommendations': tools.get_recommendations,
+    'discover_media': tools.discover_media,
+    'get_ai_picks': tools.get_ai_picks # <--- NEW TOOL
+}
+
+# 2. System Instructions (The Brain)
+sys_instruct = """
+You are a Smart Movie Expert. 
+
+RULES:
+1. **Simple Search:** If user asks "Search for Inception", use `search_media`.
+2. **Complex Vibe (e.g., "Thriller like Death Note"):** - DO NOT use `get_recommendations`.
+   - THINK: What matches this vibe? (e.g., Se7en, The Prestige, Oldboy).
+   - USE `get_ai_picks` tool with that list: `get_ai_picks(movie_names_list=["Se7en", "The Prestige"])`.
+3. **Filters:** For "Hindi movies under 90min", use `discover_media`.
+"""
     sys_instruct = """
     You are a Movie Expert.
     1. Use `search_media` for specific titles.
@@ -171,3 +184,4 @@ else:
 
                 except Exception as e:
                     st.error(f"Error: {e}")
+
