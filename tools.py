@@ -1,38 +1,34 @@
 import os
 import requests
-from dotenv import load_dotenv
+import streamlit as st
 
-# Load API keys
-load_dotenv()
-TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+# Setup API Key (Safe handling for both Cloud and Local)
+try:
+    TMDB_API_KEY = st.secrets["TMDB_API_KEY"]
+except:
+    from dotenv import load_dotenv
+    load_dotenv()
+    TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
-def fetch_tmdb_data(endpoint, params={}):
-    """
-    Universal function to talk to TMDB
-    """
-    base_url = "https://api.themoviedb.org/3"
-    url = f"{base_url}{endpoint}"
+BASE_URL = "https://api.themoviedb.org/3"
+IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
+
+def fetch_data(endpoint, params={}):
     params['api_key'] = TMDB_API_KEY
-    params['language'] = 'en-US'
-    
+    url = f"{BASE_URL}{endpoint}"
     response = requests.get(url, params=params)
     return response.json()
 
-def search_media(query, media_type="movie"):
-    """
-    Searches for movies or tv shows based on query.
-    media_type can be 'movie' or 'tv'
-    """
-    endpoint = f"/search/{media_type}"
-    params = {"query": query}
-    data = fetch_tmdb_data(endpoint, params)
-    
+def format_results(data, media_type="movie"):
+    """ Helper to clean data and add full image URLs """
     results = []
     if 'results' in data:
-        # Sirf top 5 results lenge taaki agent confuse na ho
-        for item in data['results'][:5]:
-            title = item.get('title') if media_type == 'movie' else item.get('name')
-            date = item.get('release_date') if media_type == 'movie' else item.get('first_air_date')
+        for item in data['results'][:8]: # Top 8 results for grid
+            path = item.get('poster_path')
+            full_img = f"{IMAGE_BASE_URL}{path}" if path else "https://via.placeholder.com/500x750?text=No+Image"
+            
+            title = item.get('title') if 'title' in item else item.get('name')
+            date = item.get('release_date') if 'release_date' in item else item.get('first_air_date')
             
             results.append({
                 "id": item.get('id'),
@@ -40,32 +36,48 @@ def search_media(query, media_type="movie"):
                 "overview": item.get('overview'),
                 "rating": item.get('vote_average'),
                 "date": date,
-                "poster_path": item.get('poster_path'), # UI ke liye image url
-                "type": media_type
+                "poster_url": full_img,
+                "type": media_type or item.get('media_type')
             })
     return results
 
+# --- TOOL 1: Basic Search (Existing) ---
+def search_media(query):
+    """ Searches for a specific movie or TV show by name. """
+    # Pehle movie try karo
+    data = fetch_data("/search/multi", {"query": query})
+    return format_results(data)
+
+# --- TOOL 2: Trending (Existing) ---
 def get_trending():
-    """
-    Fetches trending content (mix of movies and tv)
-    """
-    endpoint = "/trending/all/day"
-    data = fetch_tmdb_data(endpoint)
-    results = []
-    if 'results' in data:
-        for item in data['results'][:5]:
-            media_type = item.get('media_type') # movie or tv
-            title = item.get('title') if media_type == 'movie' else item.get('name')
-            results.append({
-                "title": title,
-                "type": media_type,
-                "rating": item.get('vote_average'),
-                "overview": item.get('overview')
-            })
-    return results
+    """ Gets trending movies/shows today. """
+    data = fetch_data("/trending/all/day")
+    return format_results(data)
 
-# --- TESTING AREA (Ye code tabhi chalega jab hum directly is file ko run karenge) ---
-if __name__ == "__main__":
-    print("Testing TMDB Tools...")
-    print("Searching for 'Breaking Bad' (TV)...")
-    print(search_media("Breaking Bad", "tv"))
+# --- TOOL 3: Deep Recommendations (NEW) ---
+def get_recommendations(media_id, media_type="movie"):
+    """ 
+    Gets similar content based on a specific movie/show ID.
+    Use this when user says 'Like Dark' or 'Similar to Inception'.
+    """
+    endpoint = f"/{media_type}/{media_id}/recommendations"
+    data = fetch_data(endpoint)
+    return format_results(data, media_type)
+
+# --- TOOL 4: Advanced Filtering (NEW) ---
+def discover_media(media_type="movie", genre_id=None, language=None, max_runtime=None, sort_by="popularity.desc"):
+    """
+    Filters content by criteria.
+    - language: 'hi' for Hindi, 'en' for English.
+    - max_runtime: minutes (e.g., 90).
+    - media_type: 'movie' or 'tv'.
+    """
+    endpoint = f"/discover/{media_type}"
+    params = {"sort_by": sort_by}
+    
+    if language: params['with_original_language'] = language
+    if max_runtime and media_type == 'movie': params['with_runtime.lte'] = max_runtime
+    if genre_id: params['with_genres'] = genre_id
+    
+    data = fetch_data(endpoint, params)
+    return format_results(data, media_type)
