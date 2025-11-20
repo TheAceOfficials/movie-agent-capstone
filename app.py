@@ -144,14 +144,57 @@ else:
     sc1, sc2, sc3, sc4 = st.columns(4)
     query_input = None
     
-    if sc1.button("🔥 Trending Today"):
-        query_input = "What is trending today?"
-    if sc2.button("🤔 Thriller like Death Note"):
-        query_input = "Thriller like Death Note"
-    if sc3.button("🇮🇳 Hindi Movies < 90min"):
-        query_input = "Hindi movies under 90 minutes"
-    if sc4.button("🏎️ Action Anime (1 Day)"):
-        query_input = "Action anime to watch in 1 day"
+    # --- DYNAMIC SUGGESTION CHIPS (New Feature) ---
+    import random
+    
+    # 1. 50+ Ideas ka Pool
+    suggestion_pool = [
+        "🔥 Trending movies today",
+        "🤯 Mind-bending thrillers like Inception",
+        "🤣 Comedy movies to lift mood",
+        "🏎️ High octane action movies",
+        "👻 Horror movies based on true stories",
+        "🇮🇳 Best Bollywood movies of 90s",
+        "🕵️‍♂️ Mystery movies with plot twists",
+        "🚀 Sci-fi movies about space",
+        "🥺 Emotional movies that make you cry",
+        "👊 Action anime for beginners",
+        "🧠 Psychological anime like Death Note",
+        "⏳ Short anime series (12 episodes)",
+        "🧟 Zombie apocalypse movies",
+        "👮 Crime thrillers like Se7en",
+        "🧙‍♂️ Fantasy movies like Harry Potter",
+        "🤖 Movies about AI taking over",
+        "📅 Upcoming Marvel movies",
+        "🤠 Best Western movies",
+        "🎸 Music based movies/biopics",
+        "🏆 Oscar winning movies 2024",
+        "🍿 Family friendly movies for sunday",
+        "⏰ Hindi movies under 90 minutes",
+        "💰 Heist movies like Money Heist",
+        "🥊 Sports drama movies",
+        "🦇 Dark superhero movies",
+        "💑 Romantic comedies 2023",
+        "👽 Alien invasion movies",
+        "🗡️ Historical war movies",
+        "🐉 Anime like Attack on Titan",
+        "🎬 Christopher Nolan best movies",
+        "👑 Shah Rukh Khan romantic hits",
+        "🩸 Slasher horror movies"
+    ]
+
+    # 2. Pick 4 Random Prompts every time app reloads
+    selected_prompts = random.sample(suggestion_pool, 4)
+
+    # 3. Display Buttons
+    cols = st.columns(4)
+    query_input = None
+    
+    for i, prompt in enumerate(selected_prompts):
+        with cols[i]:
+            # Button label thoda chhota rakhenge taaki fit ho jaye
+            if st.button(prompt, use_container_width=True):
+                query_input = prompt
 
     # HISTORY DISPLAY
     for msg_idx, msg in enumerate(st.session_state.history):
@@ -210,3 +253,4 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
+
