@@ -1,21 +1,30 @@
 import streamlit as st
 import os
 import google.generativeai as genai
-from dotenv import load_dotenv
-import tools
+import tools  # Importing tools.py
 import time
 
-# 1. Setup
-load_dotenv()
-api_key = os.getenv("GOOGLE_API_KEY")
+# 1. API Key Setup (Streamlit Secrets se lega)
+# Agar secrets nahi mile (local run), toh environment variable try karega
+api_key = st.secrets.get("GOOGLE_API_KEY")
+tmdb_key = st.secrets.get("TMDB_API_KEY")
+
+# Fallback for local testing if secrets fail
+if not api_key:
+    # Local testing ke liye dotenv try karte hain
+    from dotenv import load_dotenv
+    load_dotenv()
+    api_key = os.getenv("GOOGLE_API_KEY")
 
 st.set_page_config(page_title="AI Entertainment Agent", page_icon="🎬", layout="wide")
 
-# 2. Gemini Model Setup
+# 2. Gemini Configuration
 if api_key:
     genai.configure(api_key=api_key)
+else:
+    st.error("API Key missing! Please check Streamlit Secrets.")
 
-# Agent ko batayenge ki wo kaun hai (System Instruction)
+# System Instructions
 sys_instruct = """
 You are a helpful Movie and TV Show Recommendation Agent.
 You have access to real-time data using tools.
@@ -27,15 +36,14 @@ When a user asks for a movie/show:
    - Use HTML <img> tags for posters with width='150'. 
    - Example: <img src="URL" width="150">
 4. Be concise and friendly.
-5. If asked about streaming availability (Netflix/Prime), honestly say you can't check that yet.
+5. If asked about streaming availability, say you can't check that yet.
 """
 
 agent_tools = [tools.search_media, tools.get_trending]
 
-# 3. Session State
+# 3. Session State Setup
 if "chat_session" not in st.session_state:
     try:
-        # Model hum 1.5-flash hi rakhenge, ye sabse stable hai
         model = genai.GenerativeModel(
             model_name="gemini-1.5-flash",
             tools=agent_tools,
@@ -43,39 +51,43 @@ if "chat_session" not in st.session_state:
         )
         st.session_state.chat_session = model.start_chat(enable_automatic_function_calling=True)
     except Exception as e:
-        st.error(f"Setup Error: {e}")
+        st.error(f"Error initializing Gemini: {e}")
 
 # 4. UI Layout
 st.title("🎬 AI Entertainment Assistant")
 st.caption("Powered by Google Gemini & TMDB")
 
-# Chat History Display
+# Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Display Chat History
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        # YAHAN FIX HAI: unsafe_allow_html=True taaki images dikhe
         st.markdown(msg["content"], unsafe_allow_html=True)
 
 # 5. User Input Handling
 user_input = st.chat_input("Kya dekhna chahte ho aaj? (e.g., 'Movies like Death Note')")
 
 if user_input:
+    # User Message
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
 
+    # Agent Response
     with st.chat_message("assistant"):
-        with st.spinner("Searching TMDB database..."):
+        with st.spinner("Thinking..."):
             try:
-                # Retry logic for Airtel/Network issues
+                # Send message to Gemini
                 response = st.session_state.chat_session.send_message(user_input)
                 
-                # Image Fix yahan bhi
+                # Display Result
                 st.markdown(response.text, unsafe_allow_html=True)
+                
+                # Save to History
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             
             except Exception as e:
-                except Exception as e:
-                st.error(f"ASLI ERROR: {e}")
+                # Error Handling (Ye hume batayega asli galti kya hai)
+                st.error(f"An error occurred: {e}")
