@@ -20,15 +20,22 @@ def fetch_data(endpoint, params={}):
     response = requests.get(url, params=params)
     return response.json()
 
-def format_results(data, media_type="movie"):
+def format_results(data, default_media_type="movie"):
     results = []
     if 'results' in data:
-        for item in data['results'][:8]: 
+        for item in data['results'][:10]: # Top 10 results layenge
+            # Ignore people/actors in search results
+            if item.get('media_type') == 'person':
+                continue
+
             path = item.get('poster_path')
             full_img = f"{IMAGE_BASE_URL}{path}" if path else "https://via.placeholder.com/500x750?text=No+Poster"
             title = item.get('title') if 'title' in item else item.get('name')
             date = item.get('release_date') if 'release_date' in item else item.get('first_air_date')
             rating = round(item.get('vote_average', 0), 1)
+            
+            # CRITICAL FIX: Ensure Media Type is captured correctly
+            media_type = item.get('media_type') or default_media_type
             
             results.append({
                 "id": item.get('id'),
@@ -37,11 +44,11 @@ def format_results(data, media_type="movie"):
                 "rating": rating,
                 "date": date,
                 "poster_url": full_img,
-                "type": media_type or item.get('media_type')
+                "type": media_type  # Ye batayega ki Movie hai ya Series
             })
     return results
 
-# --- BASIC TOOLS ---
+# --- TOOLS ---
 def search_media(query):
     data = fetch_data("/search/multi", {"query": query})
     return format_results(data)
@@ -55,7 +62,6 @@ def get_recommendations(media_id, media_type="movie"):
     data = fetch_data(endpoint)
     return format_results(data, media_type)
 
-# --- SMART TOOLS ---
 def discover_media(media_type="movie", genre_id=None, language=None, max_runtime=None, include_upcoming=False):
     endpoint = f"/discover/{media_type}"
     params = {"sort_by": "popularity.desc"}
@@ -69,7 +75,6 @@ def discover_media(media_type="movie", genre_id=None, language=None, max_runtime
     return format_results(data, media_type)
 
 def get_ai_picks(movie_names_list):
-    """ Fetches data for movies suggested by Gemini's Brain """
     results = []
     for name in movie_names_list:
         data = fetch_data("/search/multi", {"query": name})
@@ -80,10 +85,16 @@ def get_ai_picks(movie_names_list):
     return results
 
 def get_media_details(media_id, media_type="movie"):
-    """ Fetches Deep Details (Budget, Trailer, OTT) """
+    """ Fetches Details based on Type (Movie vs TV) """
     details = fetch_data(f"/{media_type}/{media_id}")
-    videos = fetch_data(f"/{media_type}/{media_id}/videos")
     
+    # Credits (Cast)
+    credits = fetch_data(f"/{media_type}/{media_id}/credits")
+    cast = []
+    if 'cast' in credits:
+        cast = [c['name'] for c in credits['cast'][:5]] # Top 5 actors
+
+    videos = fetch_data(f"/{media_type}/{media_id}/videos")
     trailer_key = None
     if 'results' in videos:
         for v in videos['results']:
@@ -98,6 +109,7 @@ def get_media_details(media_id, media_type="movie"):
         if 'flatrate' in in_providers:
             ott_platforms = [p['provider_name'] for p in in_providers['flatrate']]
     
+    # Data Packaging
     return {
         "id": details.get('id'),
         "title": details.get('title') or details.get('name'),
@@ -105,11 +117,16 @@ def get_media_details(media_id, media_type="movie"):
         "poster_url": f"{IMAGE_BASE_URL}{details.get('poster_path')}" if details.get('poster_path') else None,
         "rating": round(details.get('vote_average', 0), 1),
         "date": details.get('release_date') or details.get('first_air_date'),
-        "runtime": f"{details.get('runtime')} min" if 'runtime' in details else "N/A",
-        "budget": f"${details.get('budget'):,}" if details.get('budget') else "N/A",
-        "revenue": f"${details.get('revenue'):,}" if details.get('revenue') else "N/A",
+        "runtime": f"{details.get('runtime')} min" if 'runtime' in details else f"{details.get('episode_run_time', ['N/A'])[0] if details.get('episode_run_time') else 'N/A'} min",
         "genres": [g['name'] for g in details.get('genres', [])],
         "trailer_url": f"https://www.youtube.com/watch?v={trailer_key}" if trailer_key else None,
         "ott": ott_platforms,
-        "type": media_type
+        "type": media_type,
+        "cast": cast,
+        # MOVIE Specific
+        "budget": f"${details.get('budget'):,}" if details.get('budget') else None,
+        "revenue": f"${details.get('revenue'):,}" if details.get('revenue') else None,
+        # TV Specific
+        "seasons": details.get('number_of_seasons'),
+        "episodes": details.get('number_of_episodes')
     }
