@@ -1,8 +1,9 @@
 import os
 import requests
 import streamlit as st
+from datetime import datetime # Date check karne ke liye
 
-# Setup API Key (Safe handling for both Cloud and Local)
+# Setup API Key
 try:
     TMDB_API_KEY = st.secrets["TMDB_API_KEY"]
 except:
@@ -20,64 +21,64 @@ def fetch_data(endpoint, params={}):
     return response.json()
 
 def format_results(data, media_type="movie"):
-    """ Helper to clean data and add full image URLs """
     results = []
     if 'results' in data:
-        for item in data['results'][:8]: # Top 8 results for grid
+        for item in data['results'][:8]: # Top 8 results
             path = item.get('poster_path')
-            full_img = f"{IMAGE_BASE_URL}{path}" if path else "https://via.placeholder.com/500x750?text=No+Image"
+            # Agar poster nahi hai toh khali placeholder
+            full_img = f"{IMAGE_BASE_URL}{path}" if path else "https://via.placeholder.com/500x750?text=No+Poster"
             
             title = item.get('title') if 'title' in item else item.get('name')
             date = item.get('release_date') if 'release_date' in item else item.get('first_air_date')
+            rating = round(item.get('vote_average', 0), 1) # Rating ko round of kiya (e.g 7.2)
             
             results.append({
                 "id": item.get('id'),
                 "title": title,
                 "overview": item.get('overview'),
-                "rating": item.get('vote_average'),
+                "rating": rating,
                 "date": date,
                 "poster_url": full_img,
                 "type": media_type or item.get('media_type')
             })
     return results
 
-# --- TOOL 1: Basic Search (Existing) ---
+# --- TOOL 1: Search ---
 def search_media(query):
-    """ Searches for a specific movie or TV show by name. """
-    # Pehle movie try karo
     data = fetch_data("/search/multi", {"query": query})
     return format_results(data)
 
-# --- TOOL 2: Trending (Existing) ---
+# --- TOOL 2: Trending ---
 def get_trending():
-    """ Gets trending movies/shows today. """
     data = fetch_data("/trending/all/day")
     return format_results(data)
 
-# --- TOOL 3: Deep Recommendations (NEW) ---
+# --- TOOL 3: Recommendations ---
 def get_recommendations(media_id, media_type="movie"):
-    """ 
-    Gets similar content based on a specific movie/show ID.
-    Use this when user says 'Like Dark' or 'Similar to Inception'.
-    """
     endpoint = f"/{media_type}/{media_id}/recommendations"
     data = fetch_data(endpoint)
     return format_results(data, media_type)
 
-# --- TOOL 4: Advanced Filtering (NEW) ---
-def discover_media(media_type="movie", genre_id=None, language=None, max_runtime=None, sort_by="popularity.desc"):
+# --- TOOL 4: Advanced Discover (DATE FIX ADDED HERE) ---
+def discover_media(media_type="movie", genre_id=None, language=None, max_runtime=None, include_upcoming=False):
     """
-    Filters content by criteria.
-    - language: 'hi' for Hindi, 'en' for English.
-    - max_runtime: minutes (e.g., 90).
-    - media_type: 'movie' or 'tv'.
+    Filters content. 
+    IMPORTANT: 'include_upcoming=True' tabhi use karna jab user future movies mange.
     """
     endpoint = f"/discover/{media_type}"
-    params = {"sort_by": sort_by}
+    params = {"sort_by": "popularity.desc"}
     
+    # 1. Language Fix
     if language: params['with_original_language'] = language
-    if max_runtime and media_type == 'movie': params['with_runtime.lte'] = max_runtime
-    if genre_id: params['with_genres'] = genre_id
     
+    # 2. Runtime Fix
+    if max_runtime and media_type == 'movie': params['with_runtime.lte'] = max_runtime
+    
+    # 3. DATE FIX: Agar upcoming nahi manga, toh future content hatao
+    if not include_upcoming:
+        today = datetime.now().strftime("%Y-%m-%d")
+        params['primary_release_date.lte'] = today
+        params['air_date.lte'] = today
+
     data = fetch_data(endpoint, params)
     return format_results(data, media_type)
