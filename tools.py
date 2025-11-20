@@ -126,3 +126,17 @@ def get_media_details(media_id, media_type="movie"):
         "ott": ott_platforms, # List of platforms like ['Netflix', 'Amazon Prime Video']
         "type": media_type
     }
+
+# --- TOOL 6: AI Curated Picks (Smart Brain) ---
+def get_ai_picks(movie_names_list):
+    """
+    Gemini dwara sochi gayi movies ka data lata hai.
+    """
+    results = []
+    for name in movie_names_list:
+        data = fetch_data("/search/multi", {"query": name})
+        if 'results' in data and len(data['results']) > 0:
+            formatted = format_results(data) 
+            if formatted:
+                results.append(formatted[0]) 
+    return results
