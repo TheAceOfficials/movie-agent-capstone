@@ -13,6 +13,9 @@ st.markdown("""
     .detail-title {font-size: 40px; font-weight: bold; color: #E50914;}
     .tag {background-color: #333; padding: 5px 10px; border-radius: 20px; font-size: 12px; margin-right: 5px;}
     .type-badge {font-size: 10px; background-color: #E50914; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold;}
+    
+    /* Watchlist Sidebar Style */
+    .watchlist-item {padding: 10px; background-color: #1E1E1E; margin-bottom: 5px; border-radius: 5px; border-left: 3px solid #E50914;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -20,7 +23,7 @@ st.markdown("""
 try:
     api_key = st.secrets["GOOGLE_API_KEY"]
 except:
-    st.error("Secrets not found. Please check Streamlit settings.")
+    st.error("Secrets not found.")
     st.stop()
 
 genai.configure(api_key=api_key)
@@ -30,6 +33,8 @@ if "selected_movie" not in st.session_state:
     st.session_state.selected_movie = None
 if "history" not in st.session_state:
     st.session_state.history = []
+if "watchlist" not in st.session_state:
+    st.session_state.watchlist = [] # NEW MEMORY FEATURE
 
 # --- CACHED MODEL ---
 @st.cache_resource
@@ -55,6 +60,26 @@ def get_chat_session():
 
 chat = get_chat_session()
 
+# --- SIDEBAR (Watchlist & Info) ---
+with st.sidebar:
+    st.header("🍿 My Watchlist")
+    if st.session_state.watchlist:
+        for item in st.session_state.watchlist:
+            st.markdown(f"<div class='watchlist-item'>{item['title']} ({item['rating']}⭐)</div>", unsafe_allow_html=True)
+        
+        if st.button("Clear Watchlist"):
+            st.session_state.watchlist = []
+            st.rerun()
+    else:
+        st.caption("Your watchlist is empty.")
+        
+    st.divider()
+    st.subheader("About")
+    st.info("Powered by Google Gemini 2.0 & TMDB API.\nBuilt for Google AI Agents Capstone.")
+    if st.button("Clear Chat History"):
+        st.session_state.history = []
+        st.rerun()
+
 # --- HELPER: DETAIL PAGE ---
 def show_details_page():
     movie = st.session_state.selected_movie
@@ -65,29 +90,32 @@ def show_details_page():
     col1, col2 = st.columns([1, 2])
     with col1:
         if movie['poster_url']: st.image(movie['poster_url'], use_container_width=True)
+        
+        # NEW: ADD TO WATCHLIST BUTTON
+        # Check if already in watchlist
+        is_in_list = any(m['id'] == movie['id'] for m in st.session_state.watchlist)
+        if is_in_list:
+            if st.button("✅ Added to Watchlist"):
+                pass # Already added
+        else:
+            if st.button("➕ Add to Watchlist"):
+                st.session_state.watchlist.append(movie)
+                st.rerun()
+
     with col2:
-        # Title and Type
         media_label = "📺 TV SERIES" if movie['type'] == 'tv' else "🎬 MOVIE"
         st.markdown(f"<span class='type-badge'>{media_label}</span>", unsafe_allow_html=True)
         st.markdown(f"<div class='detail-title'>{movie['title']}</div>", unsafe_allow_html=True)
-        
-        # Meta Data
         st.markdown(f"⭐ **{movie['rating']}** | 📅 **{movie['date']}**")
         
-        # Genres
         if movie['genres']:
             tags = "".join([f"<span class='tag'>{g}</span>" for g in movie['genres']])
             st.markdown(f"<div style='margin: 10px 0;'>{tags}</div>", unsafe_allow_html=True)
             
         st.write(f"**Overview:** {movie['overview']}")
-        
-        # Cast Section (NEW)
-        if movie['cast']:
-            st.write(f"**Cast:** {', '.join(movie['cast'])}")
-            
+        if movie['cast']: st.write(f"**Cast:** {', '.join(movie['cast'])}")
         st.divider()
         
-        # CONDITIONAL METRICS (Movie vs TV)
         c1, c2 = st.columns(2)
         if movie['type'] == 'movie':
             c1.metric("Budget", movie['budget'] if movie['budget'] else "N/A")
@@ -112,37 +140,53 @@ if st.session_state.selected_movie:
 else:
     st.title("🍿 AI Entertainment Hub")
     
+    # SUGGESTION CHIPS (Clickable Queries)
+    sc1, sc2, sc3, sc4 = st.columns(4)
+    query_input = None
+    
+    if sc1.button("🔥 Trending Today"):
+        query_input = "What is trending today?"
+    if sc2.button("🤔 Thriller like Death Note"):
+        query_input = "Thriller like Death Note"
+    if sc3.button("🇮🇳 Hindi Movies < 90min"):
+        query_input = "Hindi movies under 90 minutes"
+    if sc4.button("🏎️ Action Anime (1 Day)"):
+        query_input = "Action anime to watch in 1 day"
+
+    # HISTORY DISPLAY
     for msg_idx, msg in enumerate(st.session_state.history):
         with st.chat_message(msg["role"]):
             if msg["type"] == "text":
                 st.markdown(msg["content"])
             elif msg["type"] == "grid":
-                # 5 COLUMNS GRID (Fix for Desktop Size)
                 cols = st.columns(5)
                 for item_idx, item in enumerate(msg["content"]):
                     with cols[item_idx % 5]:
                         st.image(item['poster_url'], use_container_width=True)
-                        
-                        # Title and Type Label
                         type_icon = "📺" if item['type'] == 'tv' else "🎬"
                         st.caption(f"{type_icon} {item['title']}")
-                        
                         if st.button("View Details", key=f"btn_{msg_idx}_{item['id']}_{item_idx}"):
                             full_details = tools.get_media_details(item['id'], item['type'])
                             st.session_state.selected_movie = full_details
                             st.rerun()
 
-    user_input = st.chat_input("Try: 'Thriller like Death Note' or 'Short action anime'")
-    if user_input:
-        st.session_state.history.append({"role": "user", "type": "text", "content": user_input})
-        with st.chat_message("user"): st.markdown(user_input)
+    # CHAT INPUT
+    # Agar button click hua hai toh wo query use karo, warna user input
+    if query_input:
+        user_text = query_input
+    else:
+        user_text = st.chat_input("Try: 'Sci-fi movies with mind games'")
+
+    if user_text:
+        st.session_state.history.append({"role": "user", "type": "text", "content": user_text})
+        with st.chat_message("user"): st.markdown(user_text)
         
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
                     tools_map = {'search_media': tools.search_media, 'get_trending': tools.get_trending, 'get_recommendations': tools.get_recommendations, 'discover_media': tools.discover_media, 'get_ai_picks': tools.get_ai_picks}
                     
-                    response = chat.send_message(user_input)
+                    response = chat.send_message(user_text)
                     
                     function_call = None
                     for part in response.candidates[0].content.parts:
