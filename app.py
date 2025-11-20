@@ -30,10 +30,9 @@ if "selected_movie" not in st.session_state:
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# --- CACHED MODEL LOADER (SPEED BOOST ⚡) ---
+# --- CACHED MODEL LOADER ---
 @st.cache_resource
 def get_chat_session():
-    # Tools Map
     tools_map = {
         'search_media': tools.search_media,
         'get_trending': tools.get_trending,
@@ -56,10 +55,8 @@ def get_chat_session():
         tools=list(tools_map.values()), 
         system_instruction=sys_instruct
     )
-    # Automatic calling OFF rakhenge taaki hum Grid bana sakein
     return model.start_chat(enable_automatic_function_calling=False)
 
-# Load Chat Session
 chat = get_chat_session()
 
 # --- HELPER: DETAIL PAGE ---
@@ -99,18 +96,20 @@ if st.session_state.selected_movie:
 else:
     st.title("🍿 AI Entertainment Hub")
     
-    # HISTORY LOOP
-    for msg in st.session_state.history:
+    # HISTORY LOOP (Fixed for Duplicate Keys)
+    # enumerate use kiya taaki har message ka alag number ho
+    for msg_idx, msg in enumerate(st.session_state.history):
         with st.chat_message(msg["role"]):
             if msg["type"] == "text":
                 st.markdown(msg["content"])
             elif msg["type"] == "grid":
                 cols = st.columns(4)
-                for idx, item in enumerate(msg["content"]):
-                    with cols[idx % 4]:
+                for item_idx, item in enumerate(msg["content"]):
+                    with cols[item_idx % 4]:
                         st.image(item['poster_url'], use_container_width=True)
                         st.markdown(f"**{item['title']}**")
-                        if st.button("View Details", key=f"btn_{item['id']}_{idx}"):
+                        # KEY FIX: msg_idx add kar diya taaki button unique rahe
+                        if st.button("View Details", key=f"btn_{msg_idx}_{item['id']}_{item_idx}"):
                             full_details = tools.get_media_details(item['id'], item['type'])
                             st.session_state.selected_movie = full_details
                             st.rerun()
@@ -124,15 +123,11 @@ else:
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                    # Re-map tools locally for execution
                     tools_map = {'search_media': tools.search_media, 'get_trending': tools.get_trending, 'get_recommendations': tools.get_recommendations, 'discover_media': tools.discover_media, 'get_ai_picks': tools.get_ai_picks}
                     
                     response = chat.send_message(user_input)
                     
-                    # --- SAFE FUNCTION HANDLING (CRASH FIX) ---
                     function_call = None
-                    
-                    # Check all parts safely
                     for part in response.candidates[0].content.parts:
                         if part.function_call:
                             function_call = part.function_call
@@ -146,10 +141,7 @@ else:
                             data = tools_map[fn_name](**fn_args)
                             if data:
                                 st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
-                                # Silent text update to keep context
-                                chat.history.append(
-                                    genai.protos.Content(parts=[genai.protos.Part(text="I have shown the grid.")], role="model")
-                                )
+                                chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="I have shown the grid.")], role="model"))
                                 st.rerun()
                             else: st.error("No results found.")
                     else:
@@ -157,4 +149,4 @@ else:
                         st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
                         
                 except Exception as e:
-                    st.error(f"Oops: {str(e)}") # Converted to string to avoid conversion error
+                    st.error(f"Oops: {str(e)}")
