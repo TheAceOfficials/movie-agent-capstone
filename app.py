@@ -77,6 +77,5 @@ if user_input:
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             
             except Exception as e:
-                st.error("Network issue detected (Common on Airtel/Jio). Please try again.")
-                # Console mai actual error print hoga debugging ke liye
-                print(f"Error details: {e}")
+                except Exception as e:
+                st.error(f"ASLI ERROR: {e}")
