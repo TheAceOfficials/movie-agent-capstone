@@ -82,3 +82,47 @@ def discover_media(media_type="movie", genre_id=None, language=None, max_runtime
 
     data = fetch_data(endpoint, params)
     return format_results(data, media_type)
+
+# --- TOOL 5: Get Full Details (Budget, OTT, Trailer) ---
+def get_media_details(media_id, media_type="movie"):
+    """ Fetches deep details including trailer, OTT, and finance. """
+    
+    # 1. Basic Details (Budget, Revenue, Runtime)
+    details = fetch_data(f"/{media_type}/{media_id}")
+    
+    # 2. Videos (Trailers)
+    videos = fetch_data(f"/{media_type}/{media_id}/videos")
+    trailer_key = None
+    if 'results' in videos:
+        for v in videos['results']:
+            # Hum specifically YouTube trailer dhoondh rahe hain
+            if v['site'] == 'YouTube' and v['type'] == 'Trailer':
+                trailer_key = v['key']
+                break
+    
+    # 3. Watch Providers (OTT in India)
+    providers = fetch_data(f"/{media_type}/{media_id}/watch/providers")
+    ott_platforms = []
+    if 'results' in providers and 'IN' in providers['results']: # 'IN' for India
+        in_providers = providers['results']['IN']
+        # Flatrate matlab subscription (Netflix, Prime, etc.)
+        if 'flatrate' in in_providers:
+            ott_platforms = [p['provider_name'] for p in in_providers['flatrate']]
+    
+    # 4. Formatting Data
+    return {
+        "id": details.get('id'),
+        "title": details.get('title') or details.get('name'),
+        "overview": details.get('overview'),
+        "poster_url": f"{IMAGE_BASE_URL}{details.get('poster_path')}" if details.get('poster_path') else None,
+        "backdrop_url": f"{IMAGE_BASE_URL}{details.get('backdrop_path')}" if details.get('backdrop_path') else None,
+        "rating": round(details.get('vote_average', 0), 1),
+        "date": details.get('release_date') or details.get('first_air_date'),
+        "runtime": f"{details.get('runtime')} min" if 'runtime' in details else "N/A",
+        "budget": f"${details.get('budget'):,}" if details.get('budget') else "N/A",
+        "revenue": f"${details.get('revenue'):,}" if details.get('revenue') else "N/A",
+        "genres": [g['name'] for g in details.get('genres', [])],
+        "trailer_url": f"https://www.youtube.com/watch?v={trailer_key}" if trailer_key else None,
+        "ott": ott_platforms, # List of platforms like ['Netflix', 'Amazon Prime Video']
+        "type": media_type
+    }
