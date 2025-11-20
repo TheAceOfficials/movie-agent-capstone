@@ -114,14 +114,8 @@ if user_input:
                                     st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
                                     st.markdown(f"<div class='movie-meta'>⭐ {item['rating']} | 📅 {item['date']}</div>", unsafe_allow_html=True)
                             
-                            # Gemini ko batao ki kaam ho gaya (Context update)
-                            # Hum data wapis nahi bhejenge taaki wo JSON na ugal de.
-                            # Bas ek chhota acknowledgment bhejenge.
-                            st.session_state.chat.send_message(
-                                genai.content_types.to_content(
-                                    {"role": "user", "parts": [{"text": "Display these movies to the user in a grid."}]}
-                                )
-                            )
+                            # Gemini ko simple text bhej do ki kaam ho gaya
+                            st.session_state.chat.send_message("I have displayed the results in a grid.")
                         else:
                             st.error("No results found for filters.")
                 else:
@@ -131,3 +125,4 @@ if user_input:
 
             except Exception as e:
                 st.error(f"Error: {e}")
+
