@@ -41,13 +41,21 @@ def get_chat_session():
         'get_ai_picks': tools.get_ai_picks
     }
     
+    # UPDATED BRAIN LOGIC (Point 4 Added)
     sys_instruct = """
-    You are a Smart Movie Expert.
+    You are a Smart Movie & Anime Expert.
     RULES:
     1. Simple Search: "Search Inception" -> `search_media`.
     2. Vibe/Complex: "Thriller like Death Note" -> THINK of 5 matches -> USE `get_ai_picks`.
     3. Filters: "Hindi movies < 90min" -> `discover_media`.
-    IMPORTANT: Just execute the tool. Do not output JSON. Say "Here are the top picks:".
+    
+    4. BINGE/DURATION REQUESTS: 
+       - If user asks "Anime to watch in 1 day" or "Short series":
+       - DO NOT use `discover_media` (Math fails here).
+       - THINK: Which animes are short (10-13 eps) or movies? (e.g., Cyberpunk Edgerunners, JJK 0, Erasased, FLCL).
+       - USE `get_ai_picks` with that list.
+       
+    IMPORTANT: Just execute the tool. Do not output JSON. Say "Here are some action-packed recommendations perfect for a 1-day binge:".
     """
     
     model = genai.GenerativeModel(
@@ -96,8 +104,6 @@ if st.session_state.selected_movie:
 else:
     st.title("🍿 AI Entertainment Hub")
     
-    # HISTORY LOOP (Fixed for Duplicate Keys)
-    # enumerate use kiya taaki har message ka alag number ho
     for msg_idx, msg in enumerate(st.session_state.history):
         with st.chat_message(msg["role"]):
             if msg["type"] == "text":
@@ -108,14 +114,12 @@ else:
                     with cols[item_idx % 4]:
                         st.image(item['poster_url'], use_container_width=True)
                         st.markdown(f"**{item['title']}**")
-                        # KEY FIX: msg_idx add kar diya taaki button unique rahe
                         if st.button("View Details", key=f"btn_{msg_idx}_{item['id']}_{item_idx}"):
                             full_details = tools.get_media_details(item['id'], item['type'])
                             st.session_state.selected_movie = full_details
                             st.rerun()
 
-    # INPUT
-    user_input = st.chat_input("Try: 'Thriller like Death Note' or 'Hindi movies under 90min'")
+    user_input = st.chat_input("Try: 'Action anime to watch in 1 day' or 'Short thriller series'")
     if user_input:
         st.session_state.history.append({"role": "user", "type": "text", "content": user_input})
         with st.chat_message("user"): st.markdown(user_input)
@@ -123,6 +127,7 @@ else:
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
+                    # Local tool mapping
                     tools_map = {'search_media': tools.search_media, 'get_trending': tools.get_trending, 'get_recommendations': tools.get_recommendations, 'discover_media': tools.discover_media, 'get_ai_picks': tools.get_ai_picks}
                     
                     response = chat.send_message(user_input)
@@ -141,9 +146,10 @@ else:
                             data = tools_map[fn_name](**fn_args)
                             if data:
                                 st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
-                                chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="I have shown the grid.")], role="model"))
+                                # Context update with user-friendly message
+                                chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="I have shown the recommendations.")], role="model"))
                                 st.rerun()
-                            else: st.error("No results found.")
+                            else: st.error("No results found. Try a simpler query.")
                     else:
                         st.markdown(response.text)
                         st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
