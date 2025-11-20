@@ -29,16 +29,10 @@ if "selected_movie" not in st.session_state:
     st.session_state.selected_movie = None
 if "history" not in st.session_state:
     st.session_state.history = []
-if "chat" not in st.session_state:
-    # The SMART Logic
-    sys_instruct = """
-    You are a Smart Movie Expert.
-    RULES:
-    1. Simple Search: "Search Inception" -> `search_media`.
-    2. Vibe/Complex: "Thriller like Death Note" -> THINK of 5 matches (e.g., Se7en, Prestige) -> USE `get_ai_picks`.
-    3. Filters: "Hindi movies < 90min" -> `discover_media`.
-    IMPORTANT: Just execute the tool. Do not output JSON. Say "Here are the top picks:".
-    """
+
+# --- CACHED MODEL LOADER (SPEED BOOST ⚡) ---
+@st.cache_resource
+def get_chat_session():
     # Tools Map
     tools_map = {
         'search_media': tools.search_media,
@@ -48,8 +42,25 @@ if "chat" not in st.session_state:
         'get_ai_picks': tools.get_ai_picks
     }
     
-    model = genai.GenerativeModel(model_name="gemini-2.0-flash", tools=list(tools_map.values()), system_instruction=sys_instruct)
-    st.session_state.chat = model.start_chat(enable_automatic_function_calling=False)
+    sys_instruct = """
+    You are a Smart Movie Expert.
+    RULES:
+    1. Simple Search: "Search Inception" -> `search_media`.
+    2. Vibe/Complex: "Thriller like Death Note" -> THINK of 5 matches -> USE `get_ai_picks`.
+    3. Filters: "Hindi movies < 90min" -> `discover_media`.
+    IMPORTANT: Just execute the tool. Do not output JSON. Say "Here are the top picks:".
+    """
+    
+    model = genai.GenerativeModel(
+        model_name="gemini-2.0-flash", 
+        tools=list(tools_map.values()), 
+        system_instruction=sys_instruct
+    )
+    # Automatic calling OFF rakhenge taaki hum Grid bana sakein
+    return model.start_chat(enable_automatic_function_calling=False)
+
+# Load Chat Session
+chat = get_chat_session()
 
 # --- HELPER: DETAIL PAGE ---
 def show_details_page():
@@ -113,23 +124,37 @@ else:
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
+                    # Re-map tools locally for execution
                     tools_map = {'search_media': tools.search_media, 'get_trending': tools.get_trending, 'get_recommendations': tools.get_recommendations, 'discover_media': tools.discover_media, 'get_ai_picks': tools.get_ai_picks}
                     
-                    response = st.session_state.chat.send_message(user_input)
-                    part = response.candidates[0].content.parts[0]
+                    response = chat.send_message(user_input)
                     
-                    if part.function_call:
-                        fn_name = part.function_call.name
-                        fn_args = dict(part.function_call.args)
+                    # --- SAFE FUNCTION HANDLING (CRASH FIX) ---
+                    function_call = None
+                    
+                    # Check all parts safely
+                    for part in response.candidates[0].content.parts:
+                        if part.function_call:
+                            function_call = part.function_call
+                            break
+                    
+                    if function_call:
+                        fn_name = function_call.name
+                        fn_args = dict(function_call.args)
+                        
                         if fn_name in tools_map:
                             data = tools_map[fn_name](**fn_args)
                             if data:
                                 st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
-                                st.session_state.chat.send_message("I have displayed the results.")
+                                # Silent text update to keep context
+                                chat.history.append(
+                                    genai.protos.Content(parts=[genai.protos.Part(text="I have shown the grid.")], role="model")
+                                )
                                 st.rerun()
                             else: st.error("No results found.")
                     else:
                         st.markdown(response.text)
                         st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
+                        
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    st.error(f"Oops: {str(e)}") # Converted to string to avoid conversion error
