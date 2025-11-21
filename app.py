@@ -6,91 +6,87 @@ import random
 # --- CONFIG ---
 st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide", initial_sidebar_state="expanded")
 
-# --- FINAL & TESTED AMOLED CSS (UI FIXES) ---
+# --- FINAL FIXED AMOLED THEME CSS ---
 st.markdown("""
 <style>
-    /* 1. MAIN APP BACKGROUND */
+    /* 1. MAIN BACKGROUND - PURE BLACK */
     .stApp {
         background-color: #000000 !important;
+        color: #ffffff !important;
     }
     
-    /* 2. SIDEBAR - DARK GREY TO SEPARATE FROM MAIN */
-    section[data-testid="stSidebar"] {
-        background-color: #0e0e0e !important;
+    /* 2. SIDEBAR - SLIGHTLY LIGHTER BLACK FOR VISIBILITY */
+    [data-testid="stSidebar"] {
+        background-color: #0a0a0a !important; /* Visible distinction */
         border-right: 1px solid #222;
     }
     
-    /* 3. CHAT INPUT - BLEND WITH BOTTOM */
+    /* 3. CHAT INPUT FIX - BLEND WITH BACKGROUND */
     .stChatInputContainer {
         background-color: #000000 !important;
-        padding-bottom: 15px !important;
-        padding-top: 10px !important;
+        padding-bottom: 20px;
         border-top: 1px solid #333;
     }
     div[data-testid="stChatInput"] {
         background-color: transparent !important;
     }
     div[data-testid="stChatInput"] textarea {
-        background-color: #161616 !important;
-        color: #eeeeee !important;
-        border: 1px solid #444 !important;
-        border-radius: 12px !important;
+        background-color: #111 !important;
+        color: white !important;
+        border: 1px solid #333 !important;
+        border-radius: 10px !important;
     }
     div[data-testid="stChatInput"] textarea:focus {
-        border-color: #E50914 !important; /* Netflix Red Focus */
+        border-color: #E50914 !important;
         box-shadow: none !important;
     }
 
-    /* 4. IMAGE CARDS - FORCE VERTICAL & ROUNDED */
+    /* 4. IMAGE FIX - ROUNDED CORNERS & GLOW */
     div[data-testid="stImage"] {
-        border-radius: 10px !important;
-        overflow: hidden !important;
-        transition: transform 0.2s ease !important;
-        margin-bottom: 5px !important;
-        border: none !important;
+        border-radius: 12px;
+        overflow: hidden; 
+        padding: 2px; /* Space for border */
+        transition: transform 0.2s;
+        background-color: transparent !important;
+        margin-bottom: 10px !important;
     }
     div[data-testid="stImage"] img {
-        border-radius: 10px !important;
-        object-fit: cover !important;
-        width: 100% !important;
-        aspect-ratio: 2/3 !important; /* This Forces Portrait Mode */
+        border-radius: 10px;
+        object-fit: cover;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 2/3;
     }
-    /* HOVER GLOW (SILVER) */
+    /* Hover Effect - Rounded Gradient Border */
     div[data-testid="stImage"]:hover {
-        transform: scale(1.03) !important;
-        box-shadow: 0 0 12px rgba(255, 255, 255, 0.25) !important;
-        z-index: 10 !important;
-        border: 1px solid #555 !important;
+        transform: scale(1.02);
+        background: linear-gradient(45deg, #ffffff, #888888); /* Silver Border */
+        box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); /* Soft White Glow */
+        z-index: 10;
     }
     
-    /* 5. TYPOGRAPHY & TITLES */
-    h1 { color: #E50914 !important; font-weight: 800; }
-    p, div, span { color: #e0e0e0; }
-    
+    /* 5. TITLE STYLING */
     .movie-title {
-        font-weight: 600;
-        font-size: 13px;
-        margin-top: 6px;
-        height: 38px;
-        line-height: 1.3;
+        font-weight: bold;
+        font-size: 14px;
+        margin-top: 8px;
+        height: 40px;
         overflow: hidden;
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         text-overflow: ellipsis;
-        color: #ffffff;
+        color: #e0e0e0;
         text-align: left;
     }
     
-    /* 6. BUTTONS (CHIPS & VIEW DETAILS) */
+    /* 6. BUTTONS */
     div[data-testid="stButton"] button {
         width: 100%;
-        background-color: #1a1a1a;
-        color: #ccc;
+        border-radius: 8px;
         border: 1px solid #333;
-        border-radius: 6px;
-        font-size: 13px;
-        transition: all 0.2s;
+        background-color: #1a1a1a;
+        color: #fff;
     }
     div[data-testid="stButton"] button:hover {
         border-color: #E50914;
@@ -99,15 +95,23 @@ st.markdown("""
     }
 
     /* 7. BADGES & TAGS */
-    .type-icon {font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;}
-    .detail-header {font-size: 32px; font-weight: bold; color: #E50914; margin-bottom: 8px;}
-    .genre-tag {background-color: #222; color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; margin-right: 6px; border: 1px solid #444; display: inline-block;}
-    .watchlist-item {padding: 10px; background-color: #161616; margin-bottom: 5px; border-radius: 6px; border-left: 3px solid #E50914; font-size: 14px;}
+    .type-icon {font-size: 11px; color: #aaa; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1px;}
+    .detail-header {font-size: 35px; font-weight: bold; color: #E50914; margin-bottom: 10px;}
+    .meta-info {font-size: 16px; color: #ccc; margin-bottom: 15px;}
+    .genre-tag {
+        background-color: #222; 
+        color: #fff; 
+        padding: 5px 12px; 
+        border-radius: 15px; 
+        font-size: 13px; 
+        margin-right: 8px; 
+        border: 1px solid #444;
+        display: inline-block;
+    }
+    .watchlist-item {padding: 10px; background-color: #111; margin-bottom: 5px; border-radius: 5px; border-left: 3px solid #E50914;}
     
-    /* Hide Header/Footer */
+    /* Hide Header */
     header {visibility: hidden;}
-    footer {visibility: hidden;}
-    
 </style>
 """, unsafe_allow_html=True)
 
@@ -170,17 +174,20 @@ def get_chat_session():
          - THINK: Rush, Ford v Ferrari, Senna.
          - EXECUTE: `get_ai_picks(..., specific_type='movie')`.
 
-    3. **Vibe/Topic Match:**
-       - Query: "Sci-fi about space", "Western movies".
-       - Action: THINK of 5-6 **High Quality** matches.
-       - Avoid random/loose matches. If they want "F1", give "Racing". Don't give random dramas.
-       - USE: `get_ai_picks(...)`.
+    3. **Vibe/Topic Match + REASONING:**
+       - Query: "Sci-fi about space", "Psychological anime".
+       - Action: 
+         1. GENERATE a 1-sentence reason (e.g., "I selected these for their realism...").
+         2. THINK of 5-6 **High Quality** matches.
+         3. USE: `get_ai_picks(...)`.
 
     4. **Franchise/Order:** "Marvel watch order" -> LIST ALL (20+) -> `get_ai_picks`.
     
-    5. **Binge/Short:** "Anime in 1 day" -> USE `get_ai_picks(..., specific_type='anime')`.
+    5. **Binge/Short:** "Anime in 12 eps" -> 
+       - CHECK: Verify episode count internally.
+       - USE: `get_ai_picks(..., specific_type='anime')`.
     
-    IMPORTANT: Just execute the tool. Say "Here are the top picks:".
+    IMPORTANT: Always output a friendly text explanation FIRST, then execute the tool.
     """
     model = genai.GenerativeModel("gemini-2.0-flash", tools=list(tools_map.values()), system_instruction=sys_instruct)
     return model.start_chat(enable_automatic_function_calling=False)
@@ -313,33 +320,44 @@ else:
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
+                    # Local tool mapping
                     tools_map = {'search_media': tools.search_media, 'get_trending': tools.get_trending, 'get_recommendations': tools.get_recommendations, 'discover_media': tools.discover_media, 'get_ai_picks': tools.get_ai_picks}
                     
                     response = chat.send_message(user_text)
                     
-                    # 1. ALWAYS CHECK FOR TEXT EXPLANATION FIRST
-                    if response.text:
-                        st.markdown(response.text)
-                        st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
-
-                    # 2. THEN CHECK FOR FUNCTION CALL (GRID)
+                    # --- SAFE RESPONSE HANDLING (CRASH FIX) ---
+                    text_content = None
                     function_call = None
+                    
+                    # Check ALL parts carefully
                     for part in response.candidates[0].content.parts:
+                        if part.text:
+                            text_content = part.text
                         if part.function_call:
                             function_call = part.function_call
-                            break
                     
+                    # 1. DISPLAY TEXT FIRST (Reasoning)
+                    if text_content:
+                        st.markdown(text_content)
+                        st.session_state.history.append({"role": "assistant", "type": "text", "content": text_content})
+                    
+                    # 2. EXECUTE FUNCTION (Grid)
                     if function_call:
                         fn_name = function_call.name
                         fn_args = dict(function_call.args)
+                        
                         if fn_name in tools_map:
                             data = tools_map[fn_name](**fn_args)
                             if data:
                                 st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
-                                # Silent update to model history
-                                chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="I have displayed the grid.")], role="model"))
+                                # Silent Context Update
+                                chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="Grid displayed.")], role="model"))
                                 st.rerun()
                             else: st.error("No results found. Try a simpler query.")
+                    
+                    # If no text AND no function (Rare case)
+                    elif not text_content:
+                        st.error("I couldn't find anything. Try again!")
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
