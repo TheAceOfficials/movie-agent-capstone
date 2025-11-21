@@ -4,43 +4,57 @@ import tools
 import random
 
 # --- CONFIG ---
-st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide")
+st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide", initial_sidebar_state="expanded")
 
-# --- AMOLED THEME CSS (FORCE BLACK) ---
+# --- AMOLED THEME CSS (UPDATED FOR SILVER GLOW & CHAT INPUT) ---
 st.markdown("""
 <style>
-    /* Force Background Color */
+    /* 1. FORCE BLACK BACKGROUND & TEXT */
     .stApp, .stAppViewContainer, .main {
         background-color: #000000 !important;
         color: #ffffff !important;
     }
     
-    /* Sidebar */
+    /* 2. SIDEBAR STYLING */
     [data-testid="stSidebar"] {
         background-color: #000000 !important;
         border-right: 1px solid #333;
     }
     
-    /* Header/Toolbar hide (Optional cleaner look) */
-    header {visibility: hidden;}
+    /* 3. CHAT INPUT FIX (Bottom Bar) */
+    .stChatInputContainer {
+        background-color: #000000 !important;
+        border-top: 1px solid #333 !important;
+    }
+    div[data-testid="stChatInput"] {
+        background-color: #000000 !important;
+    }
+    div[data-testid="stChatInput"] textarea {
+        background-color: #111 !important;
+        color: white !important;
+        border: 1px solid #333 !important;
+    }
 
-    /* IMAGE FIX */
+    /* 4. IMAGE STYLING (SILVER GRADIENT BORDER ON HOVER) */
     div[data-testid="stImage"] img {
         border-radius: 12px;
         object-fit: cover;
         width: 100%;
         height: auto;
         aspect-ratio: 2/3;
-        transition: transform 0.2s;
-        box-shadow: 0 4px 6px rgba(255, 255, 255, 0.1);
+        transition: all 0.3s ease-in-out;
+        border: 2px solid transparent; /* Invisible border initially */
     }
     div[data-testid="stImage"] img:hover {
-        transform: scale(1.03);
-        box-shadow: 0 0 15px rgba(229, 9, 20, 0.8);
+        transform: scale(1.02);
+        /* White/Silver Gradient Border Effect */
+        border-image: linear-gradient(45deg, #ffffff, #a0a0a0) 1;
+        box-shadow: 0 0 15px rgba(255, 255, 255, 0.3); /* Soft White Glow */
         z-index: 1;
+        border-radius: 12px; /* Keep radius */
     }
     
-    /* TITLE FIX */
+    /* 5. TITLE STYLING */
     .movie-title {
         font-weight: bold;
         font-size: 14px;
@@ -54,7 +68,7 @@ st.markdown("""
         color: #e0e0e0;
     }
     
-    /* BUTTONS */
+    /* 6. BUTTONS */
     div[data-testid="stButton"] button {
         width: 100%;
         border-radius: 8px;
@@ -63,15 +77,13 @@ st.markdown("""
         color: #fff;
     }
     div[data-testid="stButton"] button:hover {
-        border-color: #E50914;
-        color: #E50914;
-        background-color: #000;
+        border-color: #ffffff; /* White Border on Hover */
+        color: #ffffff;
+        background-color: #222;
     }
 
-    /* TYPE BADGE */
+    /* 7. BADGES & TAGS */
     .type-icon {font-size: 11px; color: #aaa; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1px;}
-    
-    /* DETAIL PAGE */
     .detail-header {font-size: 35px; font-weight: bold; color: #E50914; margin-bottom: 10px;}
     .meta-info {font-size: 16px; color: #ccc; margin-bottom: 15px;}
     .genre-tag {
@@ -85,6 +97,9 @@ st.markdown("""
         display: inline-block;
     }
     .watchlist-item {padding: 10px; background-color: #111; margin-bottom: 5px; border-radius: 5px; border-left: 3px solid #E50914;}
+    
+    /* Hide Header */
+    header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -128,7 +143,6 @@ def get_chat_session():
         'get_ai_picks': tools.get_ai_picks
     }
     
-    # --- STRICT BRAIN LOGIC ---
     sys_instruct = """
     You are a Smart Movie & Anime Expert.
     
@@ -269,7 +283,6 @@ else:
                     with cols[item_idx % 5]:
                         st.image(item['poster_url'], use_container_width=True)
                         
-                        # Icon Logic
                         type_icon = "📺" if item['type'] == 'tv' else "🎬"
                         st.markdown(f"<div class='type-icon'>{type_icon} {item['type'].upper()}</div>", unsafe_allow_html=True)
                         st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
