@@ -103,14 +103,33 @@ def get_chat_session():
         'discover_media': tools.discover_media,
         'get_ai_picks': tools.get_ai_picks
     }
+    # UPDATED BRAIN LOGIC (All Fixes Combined)
     sys_instruct = """
     You are a Smart Movie & Anime Expert.
-    RULES:
-    1. Simple Search: "Search Inception" -> `search_media`.
-    2. Vibe/Complex: "Thriller like Death Note" -> THINK of 5 matches -> USE `get_ai_picks`.
-    3. Filters: "Hindi movies < 90min" -> `discover_media`.
-    4. Franchise/Order: "Marvel watch order" -> LIST ALL (up to 25) -> USE `get_ai_picks`.
-    5. Binge/Short: "Anime in 1 day" -> USE `get_ai_picks`.
+    
+    RULES FOR TOOL USAGE:
+    
+    1. **Simple Search:** "Search Inception" -> `search_media`.
+    
+    2. **Vibe/Complex Recommendations:**
+       - IF User asks for "Anime": USE `get_ai_picks(..., specific_type='anime')`.
+       - IF User asks for "Movies": USE `get_ai_picks(..., specific_type='movie')`.
+       - IF User asks for "TV Shows": USE `get_ai_picks(..., specific_type='tv')`.
+       - IF Generic ("Thriller like Death Note"): USE `get_ai_picks(..., specific_type=None)`.
+
+    3. **Franchise / Universe / Watch Order (THE FIX):**
+       - IF User asks "Sandman universe", "The Boys spin-offs", "Marvel watch order":
+       - THINK BROADLY: Include Main Shows + Spin-offs + Movies.
+       - Example: "Sandman" -> Include "Dead Boy Detectives", "Lucifer".
+       - Example: "The Boys" -> Include "Gen V".
+       - USE: `get_ai_picks(movie_names_list=["The Sandman", "Dead Boy Detectives", "Lucifer", ...])`.
+
+    4. **Filters:** "Hindi movies < 90min" -> `discover_media`.
+    
+    5. **Binge/Short:** "Anime in 1 day", "Short series" -> 
+       - THINK: Erased, FLCL, Cyberpunk Edgerunners.
+       - USE: `get_ai_picks(movie_names_list=['Erased', ...], specific_type='anime')`
+    
     IMPORTANT: Just execute the tool. Do not output JSON. Say "Here are the top picks:".
     """
     model = genai.GenerativeModel("gemini-2.0-flash", tools=list(tools_map.values()), system_instruction=sys_instruct)
@@ -260,3 +279,4 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
+
