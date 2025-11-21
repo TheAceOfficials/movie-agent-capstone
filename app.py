@@ -6,11 +6,55 @@ import random
 # --- CONFIG ---
 st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide")
 
+# --- PREMIUM CSS STYLING (The Fix) ---
 st.markdown("""
 <style>
     .stApp {background-color: #0e1117;}
-    div[data-testid="stImage"] {border-radius: 10px; transition: transform 0.2s;}
-    div[data-testid="stImage"]:hover {transform: scale(1.05); z-index: 1;}
+    
+    /* 1. IMAGE FIX: Force all images to have consistent aspect ratio */
+    div[data-testid="stImage"] img {
+        border-radius: 10px;
+        object-fit: cover; /* Taaki image stretch na ho */
+        width: 100%;
+        height: auto;
+        aspect-ratio: 2/3; /* Standard Movie Poster Ratio */
+    }
+    
+    /* 2. TITLE FIX: Fixed Height for Titles (Max 2 lines) */
+    .movie-title {
+        font-weight: bold;
+        font-size: 14px;
+        margin-top: 5px;
+        height: 40px; /* Fixed height (approx 2 lines) */
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2; /* Sirf 2 lines dikhayega */
+        -webkit-box-orient: vertical;
+        text-overflow: ellipsis;
+        color: #fff;
+    }
+    
+    /* 3. BUTTON FIX: Uniform Buttons */
+    div[data-testid="stButton"] button {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #333;
+        background-color: #1E1E1E;
+        color: white;
+    }
+    div[data-testid="stButton"] button:hover {
+        border-color: #E50914;
+        color: #E50914;
+    }
+
+    /* 4. Type Icon Styling */
+    .type-icon {
+        font-size: 12px; 
+        color: #aaa; 
+        margin-bottom: 2px;
+    }
+
+    /* Detail Page Styling */
     .detail-title {font-size: 40px; font-weight: bold; color: #E50914;}
     .tag {background-color: #333; padding: 5px 10px; border-radius: 20px; font-size: 12px; margin-right: 5px;}
     .type-badge {font-size: 10px; background-color: #E50914; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold;}
@@ -35,7 +79,7 @@ if "history" not in st.session_state:
 if "watchlist" not in st.session_state:
     st.session_state.watchlist = []
 
-# --- CHIPS STATE (Fixing the button click issue) ---
+# --- CHIPS STATE ---
 if "chips" not in st.session_state:
     suggestion_pool = [
         "🔥 Trending movies today", "🤯 Mind-bending thrillers like Inception",
@@ -59,33 +103,15 @@ def get_chat_session():
         'discover_media': tools.discover_media,
         'get_ai_picks': tools.get_ai_picks
     }
-    # UPDATED BRAIN LOGIC (Unlimited for Watch Orders)
     sys_instruct = """
     You are a Smart Movie & Anime Expert.
-    
-    RULES FOR TOOL USAGE:
-    
-    1. **Simple Search:** "Search Inception" -> `search_media`.
-    
-    2. **Vibe/Complex Recommendations:**
-       - IF User asks for "Thriller like Death Note":
-         - THINK of 5-6 strong matches.
-         - USE: `get_ai_picks(..., specific_type=None)`.
-
-    3. **Franchise / Watch Order (THE BIG LIST):**
-       - IF User asks "Marvel movies in order", "Harry Potter series", "Naruto watch order":
-       - DO NOT LIMIT to 5. You can list up to 25 items.
-       - Generate the CORRECT chronological or release order list.
-       - USE: `get_ai_picks(movie_names_list=["Iron Man", "Iron Man 2", ...])`.
-       - Note: If they ask for "Universe", include both Movies and TV if relevant, otherwise stick to what they asked.
-
-    4. **Filters:** "Hindi movies < 90min" -> `discover_media`.
-    
-    5. **Specific Type Check:**
-       - If user says "Anime", ensure `specific_type='anime'`.
-       - If user says "Movies", ensure `specific_type='movie'`.
-    
-    IMPORTANT: Just execute the tool. Do not output JSON. Say "Here is the complete watch order:".
+    RULES:
+    1. Simple Search: "Search Inception" -> `search_media`.
+    2. Vibe/Complex: "Thriller like Death Note" -> THINK of 5 matches -> USE `get_ai_picks`.
+    3. Filters: "Hindi movies < 90min" -> `discover_media`.
+    4. Franchise/Order: "Marvel watch order" -> LIST ALL (up to 25) -> USE `get_ai_picks`.
+    5. Binge/Short: "Anime in 1 day" -> USE `get_ai_picks`.
+    IMPORTANT: Just execute the tool. Do not output JSON. Say "Here are the top picks:".
     """
     model = genai.GenerativeModel("gemini-2.0-flash", tools=list(tools_map.values()), system_instruction=sys_instruct)
     return model.start_chat(enable_automatic_function_calling=False)
@@ -106,7 +132,7 @@ with st.sidebar:
     st.divider()
     if st.button("Clear Chat History"):
         st.session_state.history = []
-        st.session_state.chips = random.sample(st.session_state.chips, 4) # Refresh chips on clear
+        st.session_state.chips = random.sample(suggestion_pool, 4)
         st.rerun()
 
 # --- HELPER: DETAIL PAGE ---
@@ -120,7 +146,6 @@ def show_details_page():
     with col1:
         if movie['poster_url']: st.image(movie['poster_url'], use_container_width=True)
         
-        # Add to Watchlist Button
         is_in_list = any(m['id'] == movie['id'] for m in st.session_state.watchlist)
         if is_in_list:
             st.button("✅ In Watchlist", disabled=True)
@@ -167,10 +192,9 @@ if st.session_state.selected_movie:
 else:
     st.title("🍿 AI Entertainment Hub")
     
-    # DYNAMIC CHIPS (Now Stable with Session State)
+    # DYNAMIC CHIPS
     cols = st.columns(4)
     query_input = None
-    
     for i, prompt in enumerate(st.session_state.chips):
         with cols[i]:
             if st.button(prompt, use_container_width=True):
@@ -186,8 +210,12 @@ else:
                 for item_idx, item in enumerate(msg["content"]):
                     with cols[item_idx % 5]:
                         st.image(item['poster_url'], use_container_width=True)
+                        
+                        # Title Container (Fixed Height for Alignment)
                         type_icon = "📺" if item['type'] == 'tv' else "🎬"
-                        st.caption(f"{type_icon} {item['title']}")
+                        st.markdown(f"<div class='type-icon'>{type_icon} {item['type'].upper()}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
+                        
                         if st.button("View Details", key=f"btn_{msg_idx}_{item['id']}_{item_idx}"):
                             full_details = tools.get_media_details(item['id'], item['type'])
                             st.session_state.selected_movie = full_details
@@ -206,7 +234,6 @@ else:
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                    # Local tools map
                     tools_map = {'search_media': tools.search_media, 'get_trending': tools.get_trending, 'get_recommendations': tools.get_recommendations, 'discover_media': tools.discover_media, 'get_ai_picks': tools.get_ai_picks}
                     
                     response = chat.send_message(user_text)
@@ -226,12 +253,10 @@ else:
                                 st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
                                 chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="Grid shown.")], role="model"))
                                 st.rerun()
-                            else: st.error("No results found. Try a simpler query.")
+                            else: st.error("No results found.")
                     else:
                         st.markdown(response.text)
                         st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
-
-
