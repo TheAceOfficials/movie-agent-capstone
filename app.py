@@ -6,110 +6,108 @@ import random
 # --- CONFIG ---
 st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide", initial_sidebar_state="expanded")
 
-# --- FINAL FIXED AMOLED THEME CSS ---
+# --- FINAL & TESTED AMOLED CSS (UI FIXES) ---
 st.markdown("""
 <style>
-    /* 1. MAIN BACKGROUND - PURE BLACK */
-    .stApp, .stAppViewContainer, .main {
+    /* 1. MAIN APP BACKGROUND */
+    .stApp {
         background-color: #000000 !important;
-        color: #ffffff !important;
     }
     
-    /* 2. SIDEBAR - SLIGHTLY LIGHTER BLACK FOR VISIBILITY */
-    [data-testid="stSidebar"] {
-        background-color: #0a0a0a !important; /* Visible distinction */
+    /* 2. SIDEBAR - DARK GREY TO SEPARATE FROM MAIN */
+    section[data-testid="stSidebar"] {
+        background-color: #0e0e0e !important;
         border-right: 1px solid #222;
     }
     
-    /* 3. CHAT INPUT FIX - BLEND WITH BACKGROUND */
+    /* 3. CHAT INPUT - BLEND WITH BOTTOM */
     .stChatInputContainer {
         background-color: #000000 !important;
-        padding-bottom: 20px;
+        padding-bottom: 15px !important;
+        padding-top: 10px !important;
         border-top: 1px solid #333;
     }
     div[data-testid="stChatInput"] {
         background-color: transparent !important;
     }
     div[data-testid="stChatInput"] textarea {
-        background-color: #111 !important;
-        color: white !important;
-        border: 1px solid #333 !important;
-        border-radius: 10px !important;
+        background-color: #161616 !important;
+        color: #eeeeee !important;
+        border: 1px solid #444 !important;
+        border-radius: 12px !important;
     }
     div[data-testid="stChatInput"] textarea:focus {
-        border-color: #E50914 !important;
+        border-color: #E50914 !important; /* Netflix Red Focus */
         box-shadow: none !important;
     }
 
-    /* 4. IMAGE FIX - ROUNDED CORNERS & GLOW */
-    /* Container ko round karte hain taaki outline square na aaye */
+    /* 4. IMAGE CARDS - FORCE VERTICAL & ROUNDED */
     div[data-testid="stImage"] {
-        border-radius: 12px;
-        overflow: hidden; 
-        padding: 2px; /* Space for border */
-        transition: transform 0.2s;
+        border-radius: 10px !important;
+        overflow: hidden !important;
+        transition: transform 0.2s ease !important;
+        margin-bottom: 5px !important;
+        border: none !important;
     }
     div[data-testid="stImage"] img {
-        border-radius: 10px;
-        object-fit: cover;
-        width: 100%;
-        height: auto;
-        aspect-ratio: 2/3;
+        border-radius: 10px !important;
+        object-fit: cover !important;
+        width: 100% !important;
+        aspect-ratio: 2/3 !important; /* This Forces Portrait Mode */
     }
-    /* Hover Effect - Rounded Gradient Border */
+    /* HOVER GLOW (SILVER) */
     div[data-testid="stImage"]:hover {
-        transform: scale(1.02);
-        background: linear-gradient(45deg, #ffffff, #888888); /* Silver Border */
-        box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); /* Soft White Glow */
-        z-index: 10;
+        transform: scale(1.03) !important;
+        box-shadow: 0 0 12px rgba(255, 255, 255, 0.25) !important;
+        z-index: 10 !important;
+        border: 1px solid #555 !important;
     }
     
-    /* 5. TITLE STYLING */
+    /* 5. TYPOGRAPHY & TITLES */
+    h1 { color: #E50914 !important; font-weight: 800; }
+    p, div, span { color: #e0e0e0; }
+    
     .movie-title {
-        font-weight: bold;
-        font-size: 14px;
-        margin-top: 8px;
-        height: 40px;
+        font-weight: 600;
+        font-size: 13px;
+        margin-top: 6px;
+        height: 38px;
+        line-height: 1.3;
         overflow: hidden;
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         text-overflow: ellipsis;
-        color: #e0e0e0;
+        color: #ffffff;
+        text-align: left;
     }
     
-    /* 6. BUTTONS */
+    /* 6. BUTTONS (CHIPS & VIEW DETAILS) */
     div[data-testid="stButton"] button {
         width: 100%;
-        border-radius: 8px;
+        background-color: #1a1a1a;
+        color: #ccc;
         border: 1px solid #333;
-        background-color: #111;
-        color: #fff;
+        border-radius: 6px;
+        font-size: 13px;
+        transition: all 0.2s;
     }
     div[data-testid="stButton"] button:hover {
         border-color: #E50914;
-        color: #E50914;
+        color: #fff;
         background-color: #000;
     }
 
     /* 7. BADGES & TAGS */
-    .type-icon {font-size: 11px; color: #aaa; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1px;}
-    .detail-header {font-size: 35px; font-weight: bold; color: #E50914; margin-bottom: 10px;}
-    .meta-info {font-size: 16px; color: #ccc; margin-bottom: 15px;}
-    .genre-tag {
-        background-color: #222; 
-        color: #fff; 
-        padding: 5px 12px; 
-        border-radius: 15px; 
-        font-size: 13px; 
-        margin-right: 8px; 
-        border: 1px solid #444;
-        display: inline-block;
-    }
-    .watchlist-item {padding: 10px; background-color: #111; margin-bottom: 5px; border-radius: 5px; border-left: 3px solid #E50914;}
+    .type-icon {font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;}
+    .detail-header {font-size: 32px; font-weight: bold; color: #E50914; margin-bottom: 8px;}
+    .genre-tag {background-color: #222; color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; margin-right: 6px; border: 1px solid #444; display: inline-block;}
+    .watchlist-item {padding: 10px; background-color: #161616; margin-bottom: 5px; border-radius: 6px; border-left: 3px solid #E50914; font-size: 14px;}
     
-    /* Header Hide */
+    /* Hide Header/Footer */
     header {visibility: hidden;}
+    footer {visibility: hidden;}
+    
 </style>
 """, unsafe_allow_html=True)
 
@@ -319,6 +317,12 @@ else:
                     
                     response = chat.send_message(user_text)
                     
+                    # 1. ALWAYS CHECK FOR TEXT EXPLANATION FIRST
+                    if response.text:
+                        st.markdown(response.text)
+                        st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
+
+                    # 2. THEN CHECK FOR FUNCTION CALL (GRID)
                     function_call = None
                     for part in response.candidates[0].content.parts:
                         if part.function_call:
@@ -332,12 +336,10 @@ else:
                             data = tools_map[fn_name](**fn_args)
                             if data:
                                 st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
-                                chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="Grid shown.")], role="model"))
+                                # Silent update to model history
+                                chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="I have displayed the grid.")], role="model"))
                                 st.rerun()
                             else: st.error("No results found. Try a simpler query.")
-                    else:
-                        st.markdown(response.text)
-                        st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
