@@ -74,14 +74,53 @@ def discover_media(media_type="movie", genre_id=None, language=None, max_runtime
     data = fetch_data(endpoint, params)
     return format_results(data, media_type)
 
-def get_ai_picks(movie_names_list):
+# --- UPDATED SMART TOOL (Strict Filtering) ---
+def get_ai_picks(movie_names_list, specific_type=None):
+    """
+    Fetches data for movies suggested by Gemini.
+    specific_type: 'movie', 'tv', or 'anime' (to filter strictly)
+    """
     results = []
     for name in movie_names_list:
+        # Hum zyada results mangenge taaki filter kar sakein
         data = fetch_data("/search/multi", {"query": name})
-        if 'results' in data and len(data['results']) > 0:
-            formatted = format_results(data) 
-            if formatted:
-                results.append(formatted[0]) 
+        
+        found_match = False
+        if 'results' in data:
+            for item in data['results']:
+                # Skip people
+                if item.get('media_type') == 'person': continue
+                
+                # --- STRICT FILTERING LOGIC ---
+                is_valid = True
+                
+                if specific_type == 'anime':
+                    # Anime hona chahiye (Genre ID 16 = Animation)
+                    genre_ids = item.get('genre_ids', [])
+                    if 16 not in genre_ids: 
+                        is_valid = False # Ye Animation nahi hai, skip karo
+                
+                elif specific_type == 'movie':
+                    if item.get('media_type') != 'movie': is_valid = False
+                    
+                elif specific_type == 'tv':
+                    if item.get('media_type') != 'tv': is_valid = False
+
+                # Agar valid hai, toh isse add karo aur loop break karo
+                if is_valid:
+                    formatted = format_results({'results': [item]})
+                    if formatted:
+                        results.append(formatted[0])
+                        found_match = True
+                        break 
+            
+            # Agar strict filter ke baad bhi kuch nahi mila, toh fallback (First result)
+            # Lekin Anime ke case mai fallback nahi karenge taaki galti na ho
+            if not found_match and specific_type != 'anime':
+                 if len(data['results']) > 0:
+                    formatted = format_results({'results': [data['results'][0]]})
+                    if formatted: results.append(formatted[0])
+
     return results
 
 def get_media_details(media_id, media_type="movie"):
@@ -130,3 +169,4 @@ def get_media_details(media_id, media_type="movie"):
         "seasons": details.get('number_of_seasons'),
         "episodes": details.get('number_of_episodes')
     }
+
