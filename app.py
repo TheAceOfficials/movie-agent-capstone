@@ -6,7 +6,7 @@ import random
 # --- CONFIG ---
 st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide", initial_sidebar_state="expanded")
 
-# --- FINAL FIXED AMOLED THEME CSS ---
+# --- FINAL FIXED CSS (SIDEBAR BUTTON FIX) ---
 st.markdown("""
 <style>
     /* 1. MAIN BACKGROUND - PURE BLACK */
@@ -15,13 +15,27 @@ st.markdown("""
         color: #ffffff !important;
     }
     
-    /* 2. SIDEBAR - SLIGHTLY LIGHTER BLACK FOR VISIBILITY */
-    [data-testid="stSidebar"] {
-        background-color: #0a0a0a !important; /* Visible distinction */
+    /* 2. SIDEBAR - SLIGHTLY LIGHTER BLACK */
+    section[data-testid="stSidebar"] {
+        background-color: #0e0e0e !important;
         border-right: 1px solid #222;
     }
     
-    /* 3. CHAT INPUT FIX - BLEND WITH BACKGROUND */
+    /* 3. HEADER & SIDEBAR TOGGLE FIX (CRITICAL) */
+    header[data-testid="stHeader"] {
+        background-color: transparent !important; /* Header ko transparent kiya */
+        visibility: visible !important; /* Isse visible rakha taaki button dikhe */
+    }
+    /* Jo upar coloured line aati hai usse chupana */
+    div[data-testid="stDecoration"] {
+        visibility: hidden;
+    }
+    /* Sidebar Toggle Button ko Red karna taaki dikhe */
+    button[kind="header"] {
+        color: #E50914 !important; 
+    }
+
+    /* 4. CHAT INPUT FIX */
     .stChatInputContainer {
         background-color: #000000 !important;
         padding-bottom: 20px;
@@ -31,7 +45,7 @@ st.markdown("""
         background-color: transparent !important;
     }
     div[data-testid="stChatInput"] textarea {
-        background-color: #111 !important;
+        background-color: #161616 !important;
         color: white !important;
         border: 1px solid #333 !important;
         border-radius: 10px !important;
@@ -41,11 +55,11 @@ st.markdown("""
         box-shadow: none !important;
     }
 
-    /* 4. IMAGE FIX - ROUNDED CORNERS & GLOW */
+    /* 5. IMAGE FIX */
     div[data-testid="stImage"] {
         border-radius: 12px;
         overflow: hidden; 
-        padding: 2px; /* Space for border */
+        padding: 2px;
         transition: transform 0.2s;
         background-color: transparent !important;
         margin-bottom: 10px !important;
@@ -57,15 +71,14 @@ st.markdown("""
         height: auto;
         aspect-ratio: 2/3;
     }
-    /* Hover Effect - Rounded Gradient Border */
     div[data-testid="stImage"]:hover {
         transform: scale(1.02);
-        background: linear-gradient(45deg, #ffffff, #888888); /* Silver Border */
-        box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); /* Soft White Glow */
+        background: linear-gradient(45deg, #ffffff, #888888);
+        box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
         z-index: 10;
     }
     
-    /* 5. TITLE STYLING */
+    /* 6. TITLE STYLING */
     .movie-title {
         font-weight: bold;
         font-size: 14px;
@@ -80,7 +93,7 @@ st.markdown("""
         text-align: left;
     }
     
-    /* 6. BUTTONS */
+    /* 7. BUTTONS */
     div[data-testid="stButton"] button {
         width: 100%;
         border-radius: 8px;
@@ -94,24 +107,13 @@ st.markdown("""
         background-color: #000;
     }
 
-    /* 7. BADGES & TAGS */
+    /* 8. BADGES & TAGS */
     .type-icon {font-size: 11px; color: #aaa; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1px;}
     .detail-header {font-size: 35px; font-weight: bold; color: #E50914; margin-bottom: 10px;}
     .meta-info {font-size: 16px; color: #ccc; margin-bottom: 15px;}
-    .genre-tag {
-        background-color: #222; 
-        color: #fff; 
-        padding: 5px 12px; 
-        border-radius: 15px; 
-        font-size: 13px; 
-        margin-right: 8px; 
-        border: 1px solid #444;
-        display: inline-block;
-    }
-    .watchlist-item {padding: 10px; background-color: #111; margin-bottom: 5px; border-radius: 5px; border-left: 3px solid #E50914;}
+    .genre-tag {background-color: #222; color: #fff; padding: 5px 12px; border-radius: 15px; font-size: 13px; margin-right: 8px; border: 1px solid #444; display: inline-block;}
+    .watchlist-item {padding: 10px; background-color: #161616; margin-bottom: 5px; border-radius: 5px; border-left: 3px solid #E50914;}
     
-    /* Hide Header */
-    header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -174,20 +176,17 @@ def get_chat_session():
          - THINK: Rush, Ford v Ferrari, Senna.
          - EXECUTE: `get_ai_picks(..., specific_type='movie')`.
 
-    3. **Vibe/Topic Match + REASONING:**
-       - Query: "Sci-fi about space", "Psychological anime".
-       - Action: 
-         1. GENERATE a 1-sentence reason (e.g., "I selected these for their realism...").
-         2. THINK of 5-6 **High Quality** matches.
-         3. USE: `get_ai_picks(...)`.
+    3. **Vibe/Topic Match:**
+       - Query: "Sci-fi about space", "Western movies".
+       - Action: THINK of 5-6 **High Quality** matches.
+       - Avoid random/loose matches. If they want "F1", give "Racing". Don't give random dramas.
+       - USE: `get_ai_picks(...)`.
 
     4. **Franchise/Order:** "Marvel watch order" -> LIST ALL (20+) -> `get_ai_picks`.
     
-    5. **Binge/Short:** "Anime in 12 eps" -> 
-       - CHECK: Verify episode count internally.
-       - USE: `get_ai_picks(..., specific_type='anime')`.
+    5. **Binge/Short:** "Anime in 1 day" -> USE `get_ai_picks(..., specific_type='anime')`.
     
-    IMPORTANT: Always output a friendly text explanation FIRST, then execute the tool.
+    IMPORTANT: Just execute the tool. Say "Here are the top picks:".
     """
     model = genai.GenerativeModel("gemini-2.0-flash", tools=list(tools_map.values()), system_instruction=sys_instruct)
     return model.start_chat(enable_automatic_function_calling=False)
@@ -320,42 +319,34 @@ else:
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                    # Local tool mapping
                     tools_map = {'search_media': tools.search_media, 'get_trending': tools.get_trending, 'get_recommendations': tools.get_recommendations, 'discover_media': tools.discover_media, 'get_ai_picks': tools.get_ai_picks}
                     
                     response = chat.send_message(user_text)
                     
-                    # --- SAFE RESPONSE HANDLING (CRASH FIX) ---
+                    # SAFE RESPONSE HANDLING
                     text_content = None
                     function_call = None
                     
-                    # Check ALL parts carefully
                     for part in response.candidates[0].content.parts:
                         if part.text:
                             text_content = part.text
                         if part.function_call:
                             function_call = part.function_call
                     
-                    # 1. DISPLAY TEXT FIRST (Reasoning)
                     if text_content:
                         st.markdown(text_content)
                         st.session_state.history.append({"role": "assistant", "type": "text", "content": text_content})
                     
-                    # 2. EXECUTE FUNCTION (Grid)
                     if function_call:
                         fn_name = function_call.name
                         fn_args = dict(function_call.args)
-                        
                         if fn_name in tools_map:
                             data = tools_map[fn_name](**fn_args)
                             if data:
                                 st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
-                                # Silent Context Update
                                 chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="Grid displayed.")], role="model"))
                                 st.rerun()
                             else: st.error("No results found. Try a simpler query.")
-                    
-                    # If no text AND no function (Rare case)
                     elif not text_content:
                         st.error("I couldn't find anything. Try again!")
                         
