@@ -59,7 +59,7 @@ def get_chat_session():
         'discover_media': tools.discover_media,
         'get_ai_picks': tools.get_ai_picks
     }
-    # UPDATED BRAIN LOGIC
+    # UPDATED BRAIN LOGIC (Unlimited for Watch Orders)
     sys_instruct = """
     You are a Smart Movie & Anime Expert.
     
@@ -67,28 +67,25 @@ def get_chat_session():
     
     1. **Simple Search:** "Search Inception" -> `search_media`.
     
-    2. **Vibe/Complex Recommendations (The Brain):**
-       - IF User asks for "Anime":
-         - THINK of 5 anime matches.
-         - USE: `get_ai_picks(movie_names_list=[...], specific_type='anime')`
-         - This ensures only Animation results are shown.
-         
-       - IF User asks for "Movies" (Strictly):
-         - USE: `get_ai_picks(..., specific_type='movie')`
-         
-       - IF User asks for "TV Shows/Series" (Strictly):
-         - USE: `get_ai_picks(..., specific_type='tv')`
-         
-       - IF User is generic ("Thriller like Death Note"):
-         - USE: `get_ai_picks(..., specific_type=None)` (Mix is okay).
+    2. **Vibe/Complex Recommendations:**
+       - IF User asks for "Thriller like Death Note":
+         - THINK of 5-6 strong matches.
+         - USE: `get_ai_picks(..., specific_type=None)`.
 
-    3. **Filters:** "Hindi movies < 90min" -> `discover_media`.
+    3. **Franchise / Watch Order (THE BIG LIST):**
+       - IF User asks "Marvel movies in order", "Harry Potter series", "Naruto watch order":
+       - DO NOT LIMIT to 5. You can list up to 25 items.
+       - Generate the CORRECT chronological or release order list.
+       - USE: `get_ai_picks(movie_names_list=["Iron Man", "Iron Man 2", ...])`.
+       - Note: If they ask for "Universe", include both Movies and TV if relevant, otherwise stick to what they asked.
+
+    4. **Filters:** "Hindi movies < 90min" -> `discover_media`.
     
-    4. **Binge/Short:** "Short anime series" -> 
-       - THINK: Erased, FLCL, Cyberpunk Edgerunners.
-       - USE: `get_ai_picks(movie_names_list=['Erased', 'FLCL', ...], specific_type='anime')`
+    5. **Specific Type Check:**
+       - If user says "Anime", ensure `specific_type='anime'`.
+       - If user says "Movies", ensure `specific_type='movie'`.
     
-    IMPORTANT: Just execute the tool. Say "Here are the top picks:".
+    IMPORTANT: Just execute the tool. Do not output JSON. Say "Here is the complete watch order:".
     """
     model = genai.GenerativeModel("gemini-2.0-flash", tools=list(tools_map.values()), system_instruction=sys_instruct)
     return model.start_chat(enable_automatic_function_calling=False)
@@ -236,4 +233,5 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
+
 
