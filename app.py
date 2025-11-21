@@ -6,52 +6,62 @@ import random
 # --- CONFIG ---
 st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide", initial_sidebar_state="expanded")
 
-# --- AMOLED THEME CSS (UPDATED FOR SILVER GLOW & CHAT INPUT) ---
+# --- FINAL FIXED AMOLED THEME CSS ---
 st.markdown("""
 <style>
-    /* 1. FORCE BLACK BACKGROUND & TEXT */
+    /* 1. MAIN BACKGROUND - PURE BLACK */
     .stApp, .stAppViewContainer, .main {
         background-color: #000000 !important;
         color: #ffffff !important;
     }
     
-    /* 2. SIDEBAR STYLING */
+    /* 2. SIDEBAR - SLIGHTLY LIGHTER BLACK FOR VISIBILITY */
     [data-testid="stSidebar"] {
-        background-color: #000000 !important;
-        border-right: 1px solid #333;
+        background-color: #0a0a0a !important; /* Visible distinction */
+        border-right: 1px solid #222;
     }
     
-    /* 3. CHAT INPUT FIX (Bottom Bar) */
+    /* 3. CHAT INPUT FIX - BLEND WITH BACKGROUND */
     .stChatInputContainer {
         background-color: #000000 !important;
-        border-top: 1px solid #333 !important;
+        padding-bottom: 20px;
+        border-top: 1px solid #333;
     }
     div[data-testid="stChatInput"] {
-        background-color: #000000 !important;
+        background-color: transparent !important;
     }
     div[data-testid="stChatInput"] textarea {
         background-color: #111 !important;
         color: white !important;
         border: 1px solid #333 !important;
+        border-radius: 10px !important;
+    }
+    div[data-testid="stChatInput"] textarea:focus {
+        border-color: #E50914 !important;
+        box-shadow: none !important;
     }
 
-    /* 4. IMAGE STYLING (SILVER GRADIENT BORDER ON HOVER) */
-    div[data-testid="stImage"] img {
+    /* 4. IMAGE FIX - ROUNDED CORNERS & GLOW */
+    /* Container ko round karte hain taaki outline square na aaye */
+    div[data-testid="stImage"] {
         border-radius: 12px;
+        overflow: hidden; 
+        padding: 2px; /* Space for border */
+        transition: transform 0.2s;
+    }
+    div[data-testid="stImage"] img {
+        border-radius: 10px;
         object-fit: cover;
         width: 100%;
         height: auto;
         aspect-ratio: 2/3;
-        transition: all 0.3s ease-in-out;
-        border: 2px solid transparent; /* Invisible border initially */
     }
-    div[data-testid="stImage"] img:hover {
+    /* Hover Effect - Rounded Gradient Border */
+    div[data-testid="stImage"]:hover {
         transform: scale(1.02);
-        /* White/Silver Gradient Border Effect */
-        border-image: linear-gradient(45deg, #ffffff, #a0a0a0) 1;
-        box-shadow: 0 0 15px rgba(255, 255, 255, 0.3); /* Soft White Glow */
-        z-index: 1;
-        border-radius: 12px; /* Keep radius */
+        background: linear-gradient(45deg, #ffffff, #888888); /* Silver Border */
+        box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); /* Soft White Glow */
+        z-index: 10;
     }
     
     /* 5. TITLE STYLING */
@@ -77,9 +87,9 @@ st.markdown("""
         color: #fff;
     }
     div[data-testid="stButton"] button:hover {
-        border-color: #ffffff; /* White Border on Hover */
-        color: #ffffff;
-        background-color: #222;
+        border-color: #E50914;
+        color: #E50914;
+        background-color: #000;
     }
 
     /* 7. BADGES & TAGS */
@@ -98,7 +108,7 @@ st.markdown("""
     }
     .watchlist-item {padding: 10px; background-color: #111; margin-bottom: 5px; border-radius: 5px; border-left: 3px solid #E50914;}
     
-    /* Hide Header */
+    /* Header Hide */
     header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
