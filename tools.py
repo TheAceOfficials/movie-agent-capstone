@@ -124,15 +124,16 @@ def get_ai_picks(movie_names_list, specific_type=None):
     return results
 
 def get_media_details(media_id, media_type="movie"):
-    """ Fetches Details based on Type (Movie vs TV) """
+    """ Fetches Deep Details (Budget, Trailer, OTT, Cast, Runtime) """
     details = fetch_data(f"/{media_type}/{media_id}")
     
-    # Credits (Cast)
+    # 1. Cast / Credits
     credits = fetch_data(f"/{media_type}/{media_id}/credits")
     cast = []
     if 'cast' in credits:
         cast = [c['name'] for c in credits['cast'][:5]] # Top 5 actors
 
+    # 2. Trailer
     videos = fetch_data(f"/{media_type}/{media_id}/videos")
     trailer_key = None
     if 'results' in videos:
@@ -141,12 +142,20 @@ def get_media_details(media_id, media_type="movie"):
                 trailer_key = v['key']
                 break
     
+    # 3. OTT Providers (India)
     providers = fetch_data(f"/{media_type}/{media_id}/watch/providers")
     ott_platforms = []
     if 'results' in providers and 'IN' in providers['results']:
         in_providers = providers['results']['IN']
         if 'flatrate' in in_providers:
             ott_platforms = [p['provider_name'] for p in in_providers['flatrate']]
+    
+    # 4. Runtime Logic (Series vs Movie)
+    runtime_val = "N/A"
+    if 'runtime' in details and details['runtime']:
+        runtime_val = f"{details['runtime']} min"
+    elif 'episode_run_time' in details and details['episode_run_time']:
+        runtime_val = f"{details['episode_run_time'][0]} min"
     
     # Data Packaging
     return {
@@ -156,8 +165,8 @@ def get_media_details(media_id, media_type="movie"):
         "poster_url": f"{IMAGE_BASE_URL}{details.get('poster_path')}" if details.get('poster_path') else None,
         "rating": round(details.get('vote_average', 0), 1),
         "date": details.get('release_date') or details.get('first_air_date'),
-        "runtime": f"{details.get('runtime')} min" if 'runtime' in details else f"{details.get('episode_run_time', ['N/A'])[0] if details.get('episode_run_time') else 'N/A'} min",
-        "genres": [g['name'] for g in details.get('genres', [])],
+        "runtime": runtime_val, # Fixed Runtime
+        "genres": [g['name'] for g in details.get('genres', [])], # Fixed Genres
         "trailer_url": f"https://www.youtube.com/watch?v={trailer_key}" if trailer_key else None,
         "ott": ott_platforms,
         "type": media_type,
@@ -169,4 +178,3 @@ def get_media_details(media_id, media_type="movie"):
         "seasons": details.get('number_of_seasons'),
         "episodes": details.get('number_of_episodes')
     }
-
