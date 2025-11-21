@@ -1,6 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 import tools
+import random
 
 # --- CONFIG ---
 st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide")
@@ -13,8 +14,6 @@ st.markdown("""
     .detail-title {font-size: 40px; font-weight: bold; color: #E50914;}
     .tag {background-color: #333; padding: 5px 10px; border-radius: 20px; font-size: 12px; margin-right: 5px;}
     .type-badge {font-size: 10px; background-color: #E50914; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold;}
-    
-    /* Watchlist Sidebar Style */
     .watchlist-item {padding: 10px; background-color: #1E1E1E; margin-bottom: 5px; border-radius: 5px; border-left: 3px solid #E50914;}
 </style>
 """, unsafe_allow_html=True)
@@ -34,7 +33,21 @@ if "selected_movie" not in st.session_state:
 if "history" not in st.session_state:
     st.session_state.history = []
 if "watchlist" not in st.session_state:
-    st.session_state.watchlist = [] # NEW MEMORY FEATURE
+    st.session_state.watchlist = []
+
+# --- CHIPS STATE (Fixing the button click issue) ---
+if "chips" not in st.session_state:
+    suggestion_pool = [
+        "🔥 Trending movies today", "🤯 Mind-bending thrillers like Inception",
+        "🤣 Comedy movies to lift mood", "🏎️ High octane action movies",
+        "👻 Horror movies based on true stories", "🇮🇳 Best Bollywood movies of 90s",
+        "🚀 Sci-fi movies about space", "🥺 Emotional movies that make you cry",
+        "👊 Action anime for beginners", "🧠 Psychological anime like Death Note",
+        "⏳ Short anime series (12 episodes)", "🧟 Zombie apocalypse movies",
+        "🤠 Best Western movies", "🤖 Movies about AI taking over",
+        "💰 Heist movies like Money Heist", "🥊 Sports drama movies"
+    ]
+    st.session_state.chips = random.sample(suggestion_pool, 4)
 
 # --- CACHED MODEL ---
 @st.cache_resource
@@ -46,13 +59,28 @@ def get_chat_session():
         'discover_media': tools.discover_media,
         'get_ai_picks': tools.get_ai_picks
     }
+    # UPDATED BRAIN LOGIC
     sys_instruct = """
     You are a Smart Movie & Anime Expert.
-    RULES:
-    1. Simple Search: "Search Inception" -> `search_media`.
-    2. Vibe/Complex: "Thriller like Death Note" -> THINK of 5 matches -> USE `get_ai_picks`.
-    3. Filters: "Hindi movies < 90min" -> `discover_media`.
-    4. Binge/Short: If "1 day watch" or "Short series" -> THINK of specific short animes/shows -> USE `get_ai_picks`.
+    
+    CRITICAL RULES FOR TOOL SELECTION:
+    
+    1. **Specific Title Search:** - Query: "Search Inception", "Find The Dark Knight"
+       - Action: USE `search_media`.
+
+    2. **Topic / Vibe / Genre / Similar To:**
+       - Query: "Sci-fi movies about space", "Western movies", "Thriller like Death Note", "Mind bending movies"
+       - Action: DO NOT SEARCH. TMDB cannot search sentences.
+       - INSTEAD: THINK of 5-6 specific movies that match the topic (e.g., Interstellar, Gravity, The Martian).
+       - THEN: USE `get_ai_picks(movie_names_list=["Interstellar", "Gravity", ...])`.
+
+    3. **Strict Filters:** - Query: "Hindi movies < 90min", "Comedy released in 2023"
+       - Action: USE `discover_media`.
+
+    4. **Binge / Short Watch:**
+       - Query: "Anime to watch in 1 day", "Short series"
+       - Action: THINK of short shows (e.g., FLCL, Erased). USE `get_ai_picks`.
+
     IMPORTANT: Just execute the tool. Do not output JSON. Say "Here are the top picks:".
     """
     model = genai.GenerativeModel("gemini-2.0-flash", tools=list(tools_map.values()), system_instruction=sys_instruct)
@@ -60,24 +88,21 @@ def get_chat_session():
 
 chat = get_chat_session()
 
-# --- SIDEBAR (Watchlist & Info) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("🍿 My Watchlist")
     if st.session_state.watchlist:
         for item in st.session_state.watchlist:
             st.markdown(f"<div class='watchlist-item'>{item['title']} ({item['rating']}⭐)</div>", unsafe_allow_html=True)
-        
         if st.button("Clear Watchlist"):
             st.session_state.watchlist = []
             st.rerun()
     else:
-        st.caption("Your watchlist is empty.")
-        
+        st.caption("Empty list.")
     st.divider()
-    st.subheader("About")
-    st.info("Powered by Google Gemini 2.0 & TMDB API.\nBuilt for Google AI Agents Capstone.")
     if st.button("Clear Chat History"):
         st.session_state.history = []
+        st.session_state.chips = random.sample(st.session_state.chips, 4) # Refresh chips on clear
         st.rerun()
 
 # --- HELPER: DETAIL PAGE ---
@@ -91,12 +116,10 @@ def show_details_page():
     with col1:
         if movie['poster_url']: st.image(movie['poster_url'], use_container_width=True)
         
-        # NEW: ADD TO WATCHLIST BUTTON
-        # Check if already in watchlist
+        # Add to Watchlist Button
         is_in_list = any(m['id'] == movie['id'] for m in st.session_state.watchlist)
         if is_in_list:
-            if st.button("✅ Added to Watchlist"):
-                pass # Already added
+            st.button("✅ In Watchlist", disabled=True)
         else:
             if st.button("➕ Add to Watchlist"):
                 st.session_state.watchlist.append(movie)
@@ -140,63 +163,16 @@ if st.session_state.selected_movie:
 else:
     st.title("🍿 AI Entertainment Hub")
     
-    # SUGGESTION CHIPS (Clickable Queries)
-    sc1, sc2, sc3, sc4 = st.columns(4)
-    query_input = None
-    
-    # --- DYNAMIC SUGGESTION CHIPS (New Feature) ---
-    import random
-    
-    # 1. 50+ Ideas ka Pool
-    suggestion_pool = [
-        "🔥 Trending movies today",
-        "🤯 Mind-bending thrillers like Inception",
-        "🤣 Comedy movies to lift mood",
-        "🏎️ High octane action movies",
-        "👻 Horror movies based on true stories",
-        "🇮🇳 Best Bollywood movies of 90s",
-        "🕵️‍♂️ Mystery movies with plot twists",
-        "🚀 Sci-fi movies about space",
-        "🥺 Emotional movies that make you cry",
-        "👊 Action anime for beginners",
-        "🧠 Psychological anime like Death Note",
-        "⏳ Short anime series (12 episodes)",
-        "🧟 Zombie apocalypse movies",
-        "👮 Crime thrillers like Se7en",
-        "🧙‍♂️ Fantasy movies like Harry Potter",
-        "🤖 Movies about AI taking over",
-        "📅 Upcoming Marvel movies",
-        "🤠 Best Western movies",
-        "🎸 Music based movies/biopics",
-        "🏆 Oscar winning movies 2024",
-        "🍿 Family friendly movies for sunday",
-        "⏰ Hindi movies under 90 minutes",
-        "💰 Heist movies like Money Heist",
-        "🥊 Sports drama movies",
-        "🦇 Dark superhero movies",
-        "💑 Romantic comedies 2023",
-        "👽 Alien invasion movies",
-        "🗡️ Historical war movies",
-        "🐉 Anime like Attack on Titan",
-        "🎬 Christopher Nolan best movies",
-        "👑 Shah Rukh Khan romantic hits",
-        "🩸 Slasher horror movies"
-    ]
-
-    # 2. Pick 4 Random Prompts every time app reloads
-    selected_prompts = random.sample(suggestion_pool, 4)
-
-    # 3. Display Buttons
+    # DYNAMIC CHIPS (Now Stable with Session State)
     cols = st.columns(4)
     query_input = None
     
-    for i, prompt in enumerate(selected_prompts):
+    for i, prompt in enumerate(st.session_state.chips):
         with cols[i]:
-            # Button label thoda chhota rakhenge taaki fit ho jaye
             if st.button(prompt, use_container_width=True):
                 query_input = prompt
 
-    # HISTORY DISPLAY
+    # HISTORY
     for msg_idx, msg in enumerate(st.session_state.history):
         with st.chat_message(msg["role"]):
             if msg["type"] == "text":
@@ -213,12 +189,11 @@ else:
                             st.session_state.selected_movie = full_details
                             st.rerun()
 
-    # CHAT INPUT
-    # Agar button click hua hai toh wo query use karo, warna user input
+    # INPUT
     if query_input:
         user_text = query_input
     else:
-        user_text = st.chat_input("Try: 'Sci-fi movies with mind games'")
+        user_text = st.chat_input("Try: 'Sci-fi movies about space' or 'Comedy anime'")
 
     if user_text:
         st.session_state.history.append({"role": "user", "type": "text", "content": user_text})
@@ -227,6 +202,7 @@ else:
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
+                    # Local tools map
                     tools_map = {'search_media': tools.search_media, 'get_trending': tools.get_trending, 'get_recommendations': tools.get_recommendations, 'discover_media': tools.discover_media, 'get_ai_picks': tools.get_ai_picks}
                     
                     response = chat.send_message(user_text)
@@ -244,13 +220,12 @@ else:
                             data = tools_map[fn_name](**fn_args)
                             if data:
                                 st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
-                                chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="I have shown the grid.")], role="model"))
+                                chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="Grid shown.")], role="model"))
                                 st.rerun()
-                            else: st.error("No results found.")
+                            else: st.error("No results found. Try a simpler query.")
                     else:
                         st.markdown(response.text)
                         st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
-
