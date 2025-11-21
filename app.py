@@ -6,58 +6,51 @@ import random
 # --- CONFIG ---
 st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide")
 
-# --- PREMIUM CSS STYLING (The Fix) ---
 st.markdown("""
 <style>
     .stApp {background-color: #0e1117;}
     
-    /* 1. IMAGE FIX: Force all images to have consistent aspect ratio */
+    /* IMAGE FIX */
     div[data-testid="stImage"] img {
         border-radius: 10px;
-        object-fit: cover; /* Taaki image stretch na ho */
+        object-fit: cover;
         width: 100%;
         height: auto;
-        aspect-ratio: 2/3; /* Standard Movie Poster Ratio */
+        aspect-ratio: 2/3;
     }
     
-    /* 2. TITLE FIX: Fixed Height for Titles (Max 2 lines) */
+    /* TITLE FIX */
     .movie-title {
         font-weight: bold;
         font-size: 14px;
         margin-top: 5px;
-        height: 40px; /* Fixed height (approx 2 lines) */
+        height: 40px;
         overflow: hidden;
         display: -webkit-box;
-        -webkit-line-clamp: 2; /* Sirf 2 lines dikhayega */
+        -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         text-overflow: ellipsis;
         color: #fff;
     }
     
-    /* 3. BUTTON FIX: Uniform Buttons */
-    div[data-testid="stButton"] button {
-        width: 100%;
-        border-radius: 8px;
-        border: 1px solid #333;
-        background-color: #1E1E1E;
-        color: white;
-    }
-    div[data-testid="stButton"] button:hover {
-        border-color: #E50914;
-        color: #E50914;
-    }
+    /* UI ELEMENTS */
+    .type-icon {font-size: 12px; color: #aaa; margin-bottom: 2px;}
+    div[data-testid="stButton"] button {width: 100%; border-radius: 8px; border: 1px solid #333; background-color: #1E1E1E; color: white;}
+    div[data-testid="stButton"] button:hover {border-color: #E50914; color: #E50914;}
 
-    /* 4. Type Icon Styling */
-    .type-icon {
-        font-size: 12px; 
-        color: #aaa; 
-        margin-bottom: 2px;
+    /* DETAIL PAGE STYLE */
+    .detail-header {font-size: 35px; font-weight: bold; color: #E50914; margin-bottom: 10px;}
+    .meta-info {font-size: 16px; color: #ddd; margin-bottom: 15px;}
+    .genre-tag {
+        background-color: #333; 
+        color: #fff; 
+        padding: 5px 12px; 
+        border-radius: 15px; 
+        font-size: 13px; 
+        margin-right: 8px; 
+        border: 1px solid #555;
+        display: inline-block;
     }
-
-    /* Detail Page Styling */
-    .detail-title {font-size: 40px; font-weight: bold; color: #E50914;}
-    .tag {background-color: #333; padding: 5px 10px; border-radius: 20px; font-size: 12px; margin-right: 5px;}
-    .type-badge {font-size: 10px; background-color: #E50914; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold;}
     .watchlist-item {padding: 10px; background-color: #1E1E1E; margin-bottom: 5px; border-radius: 5px; border-left: 3px solid #E50914;}
 </style>
 """, unsafe_allow_html=True)
@@ -78,8 +71,6 @@ if "history" not in st.session_state:
     st.session_state.history = []
 if "watchlist" not in st.session_state:
     st.session_state.watchlist = []
-
-# --- CHIPS STATE ---
 if "chips" not in st.session_state:
     suggestion_pool = [
         "🔥 Trending movies today", "🤯 Mind-bending thrillers like Inception",
@@ -103,7 +94,8 @@ def get_chat_session():
         'discover_media': tools.discover_media,
         'get_ai_picks': tools.get_ai_picks
     }
-    # UPDATED BRAIN LOGIC (All Fixes Combined)
+    
+    # UPDATED BRAIN LOGIC (Smarter for Rom-Coms/Time)
     sys_instruct = """
     You are a Smart Movie & Anime Expert.
     
@@ -111,24 +103,21 @@ def get_chat_session():
     
     1. **Simple Search:** "Search Inception" -> `search_media`.
     
-    2. **Vibe/Complex Recommendations:**
-       - IF User asks for "Anime": USE `get_ai_picks(..., specific_type='anime')`.
-       - IF User asks for "Movies": USE `get_ai_picks(..., specific_type='movie')`.
-       - IF User asks for "TV Shows": USE `get_ai_picks(..., specific_type='tv')`.
-       - IF Generic ("Thriller like Death Note"): USE `get_ai_picks(..., specific_type=None)`.
+    2. **Genre + Time / Vibe (THE FIX):**
+       - Query: "3hr rom-com", "Sad movies for rainy day", "Action movies 90s".
+       - DO NOT USE SEARCH.
+       - THINK: Which specific movies fit this? (e.g., for 3hr Rom-Com -> K3G, DDLJ, Rocky Aur Rani, Jab We Met).
+       - USE: `get_ai_picks(movie_names_list=["K3G", "DDLJ", ...], specific_type='movie')`.
 
-    3. **Franchise / Universe / Watch Order (THE FIX):**
-       - IF User asks "Sandman universe", "The Boys spin-offs", "Marvel watch order":
-       - THINK BROADLY: Include Main Shows + Spin-offs + Movies.
-       - Example: "Sandman" -> Include "Dead Boy Detectives", "Lucifer".
-       - Example: "The Boys" -> Include "Gen V".
-       - USE: `get_ai_picks(movie_names_list=["The Sandman", "Dead Boy Detectives", "Lucifer", ...])`.
+    3. **Complex Recommendations:**
+       - "Thriller like Death Note" -> THINK of matches -> `get_ai_picks`.
+       - "Anime" -> `get_ai_picks(..., specific_type='anime')`.
+       - "Movies" -> `get_ai_picks(..., specific_type='movie')`.
+       - "TV Shows" -> `get_ai_picks(..., specific_type='tv')`.
 
-    4. **Filters:** "Hindi movies < 90min" -> `discover_media`.
+    4. **Franchise / Order:** "Marvel watch order" -> LIST ALL -> `get_ai_picks`.
     
-    5. **Binge/Short:** "Anime in 1 day", "Short series" -> 
-       - THINK: Erased, FLCL, Cyberpunk Edgerunners.
-       - USE: `get_ai_picks(movie_names_list=['Erased', ...], specific_type='anime')`
+    5. **Filters:** "Hindi movies released in 2023" -> `discover_media`.
     
     IMPORTANT: Just execute the tool. Do not output JSON. Say "Here are the top picks:".
     """
@@ -151,10 +140,10 @@ with st.sidebar:
     st.divider()
     if st.button("Clear Chat History"):
         st.session_state.history = []
-        st.session_state.chips = random.sample(suggestion_pool, 4)
+        st.session_state.chips = random.sample(st.session_state.chips, 4)
         st.rerun()
 
-# --- HELPER: DETAIL PAGE ---
+# --- HELPER: DETAIL PAGE (Fixed Genres & Runtime) ---
 def show_details_page():
     movie = st.session_state.selected_movie
     if st.button("← Back to Search"):
@@ -174,19 +163,34 @@ def show_details_page():
                 st.rerun()
 
     with col2:
-        media_label = "📺 TV SERIES" if movie['type'] == 'tv' else "🎬 MOVIE"
-        st.markdown(f"<span class='type-badge'>{media_label}</span>", unsafe_allow_html=True)
-        st.markdown(f"<div class='detail-title'>{movie['title']}</div>", unsafe_allow_html=True)
-        st.markdown(f"⭐ **{movie['rating']}** | 📅 **{movie['date']}**")
+        # 1. Title & Header
+        st.markdown(f"<div class='detail-header'>{movie['title']}</div>", unsafe_allow_html=True)
         
+        # 2. Runtime & Type Logic
+        media_type = "TV Series" if movie['type'] == 'tv' else "Movie"
+        runtime_str = movie['runtime'] if movie['runtime'] else "N/A"
+        
+        st.markdown(f"""
+        <div class='meta-info'>
+            <span style='color: #E50914; font-weight: bold;'>{media_type}</span> • 
+            ⭐ {movie['rating']} • 
+            📅 {movie['date']} • 
+            ⏳ {runtime_str}
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 3. Genres (Loop Fix)
         if movie['genres']:
-            tags = "".join([f"<span class='tag'>{g}</span>" for g in movie['genres']])
-            st.markdown(f"<div style='margin: 10px 0;'>{tags}</div>", unsafe_allow_html=True)
+            genre_html = ""
+            for g in movie['genres']:
+                genre_html += f"<span class='genre-tag'>{g}</span>"
+            st.markdown(f"<div style='margin-bottom: 20px;'>{genre_html}</div>", unsafe_allow_html=True)
             
         st.write(f"**Overview:** {movie['overview']}")
         if movie['cast']: st.write(f"**Cast:** {', '.join(movie['cast'])}")
         st.divider()
         
+        # 4. Stats (Budget/Revenue only for Movies)
         c1, c2 = st.columns(2)
         if movie['type'] == 'movie':
             c1.metric("Budget", movie['budget'] if movie['budget'] else "N/A")
@@ -230,7 +234,7 @@ else:
                     with cols[item_idx % 5]:
                         st.image(item['poster_url'], use_container_width=True)
                         
-                        # Title Container (Fixed Height for Alignment)
+                        # Icon Logic
                         type_icon = "📺" if item['type'] == 'tv' else "🎬"
                         st.markdown(f"<div class='type-icon'>{type_icon} {item['type'].upper()}</div>", unsafe_allow_html=True)
                         st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
@@ -244,7 +248,7 @@ else:
     if query_input:
         user_text = query_input
     else:
-        user_text = st.chat_input("Try: 'Sci-fi movies about space' or 'Comedy anime'")
+        user_text = st.chat_input("Try: '3hr Rom-Com movie' or 'Sci-fi about space'")
 
     if user_text:
         st.session_state.history.append({"role": "user", "type": "text", "content": user_text})
@@ -279,4 +283,3 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
-
