@@ -6,22 +6,25 @@ import random
 # --- CONFIG ---
 st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide")
 
-# --- AMOLED THEME CSS (Only Visual Changes Here) ---
+# --- AMOLED THEME CSS (FORCE BLACK) ---
 st.markdown("""
 <style>
-    /* 1. AMOLED BLACK BACKGROUND */
-    .stApp {
-        background-color: #000000;
-        color: #ffffff;
+    /* Force Background Color */
+    .stApp, .stAppViewContainer, .main {
+        background-color: #000000 !important;
+        color: #ffffff !important;
     }
     
-    /* Sidebar also Black with subtle border */
+    /* Sidebar */
     [data-testid="stSidebar"] {
-        background-color: #000000;
+        background-color: #000000 !important;
         border-right: 1px solid #333;
     }
+    
+    /* Header/Toolbar hide (Optional cleaner look) */
+    header {visibility: hidden;}
 
-    /* 2. IMAGE FIX (Consistent Size & Glow) */
+    /* IMAGE FIX */
     div[data-testid="stImage"] img {
         border-radius: 12px;
         object-fit: cover;
@@ -29,14 +32,15 @@ st.markdown("""
         height: auto;
         aspect-ratio: 2/3;
         transition: transform 0.2s;
+        box-shadow: 0 4px 6px rgba(255, 255, 255, 0.1);
     }
     div[data-testid="stImage"] img:hover {
         transform: scale(1.03);
-        box-shadow: 0 0 15px rgba(229, 9, 20, 0.6); /* Netflix Red Glow on Hover */
+        box-shadow: 0 0 15px rgba(229, 9, 20, 0.8);
         z-index: 1;
     }
     
-    /* 3. TITLE FIX (Fixed Height) */
+    /* TITLE FIX */
     .movie-title {
         font-weight: bold;
         font-size: 14px;
@@ -50,43 +54,37 @@ st.markdown("""
         color: #e0e0e0;
     }
     
-    /* 4. BUTTONS (Dark Grey to pop on Black) */
+    /* BUTTONS */
     div[data-testid="stButton"] button {
         width: 100%;
         border-radius: 8px;
         border: 1px solid #333;
-        background-color: #161616; /* Very Dark Grey */
-        color: #e0e0e0;
+        background-color: #111;
+        color: #fff;
     }
     div[data-testid="stButton"] button:hover {
         border-color: #E50914;
         color: #E50914;
-        background-color: #000000;
+        background-color: #000;
     }
 
-    /* 5. UI ELEMENTS & BADGES */
-    .type-icon {font-size: 12px; color: #888; margin-bottom: 2px;}
+    /* TYPE BADGE */
+    .type-icon {font-size: 11px; color: #aaa; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1px;}
     
-    /* DETAIL PAGE STYLE */
+    /* DETAIL PAGE */
     .detail-header {font-size: 35px; font-weight: bold; color: #E50914; margin-bottom: 10px;}
     .meta-info {font-size: 16px; color: #ccc; margin-bottom: 15px;}
     .genre-tag {
-        background-color: #1a1a1a; 
+        background-color: #222; 
         color: #fff; 
         padding: 5px 12px; 
         border-radius: 15px; 
         font-size: 13px; 
         margin-right: 8px; 
-        border: 1px solid #333;
+        border: 1px solid #444;
         display: inline-block;
     }
-    .watchlist-item {
-        padding: 10px; 
-        background-color: #111; 
-        margin-bottom: 5px; 
-        border-radius: 5px; 
-        border-left: 3px solid #E50914;
-    }
+    .watchlist-item {padding: 10px; background-color: #111; margin-bottom: 5px; border-radius: 5px; border-left: 3px solid #E50914;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -106,8 +104,6 @@ if "history" not in st.session_state:
     st.session_state.history = []
 if "watchlist" not in st.session_state:
     st.session_state.watchlist = []
-
-# --- CHIPS STATE ---
 if "chips" not in st.session_state:
     suggestion_pool = [
         "🔥 Trending movies today", "🤯 Mind-bending thrillers like Inception",
@@ -121,7 +117,7 @@ if "chips" not in st.session_state:
     ]
     st.session_state.chips = random.sample(suggestion_pool, 4)
 
-# --- CACHED MODEL (ALL LOGIC RETAINED) ---
+# --- CACHED MODEL ---
 @st.cache_resource
 def get_chat_session():
     tools_map = {
@@ -132,26 +128,35 @@ def get_chat_session():
         'get_ai_picks': tools.get_ai_picks
     }
     
+    # --- STRICT BRAIN LOGIC ---
     sys_instruct = """
     You are a Smart Movie & Anime Expert.
     
-    RULES FOR TOOL USAGE:
+    CRITICAL RULES (FOLLOW STRICTLY):
     
     1. **Simple Search:** "Search Inception" -> `search_media`.
     
-    2. **Genre + Time / Vibe:**
-       - Query: "3hr rom-com", "Action movies 90s".
-       - DO NOT USE SEARCH.
-       - THINK: Which movies fit? (e.g., K3G, DDLJ).
-       - USE: `get_ai_picks(movie_names_list=["K3G", ...], specific_type='movie')`.
+    2. **Targeted Type (STRICT MODE):**
+       - IF User says "TV Shows like F1": 
+         - Target is **TV SHOWS**. 
+         - THINK: Drive to Survive, Le Mans: Racing is Everything, Grand Prix Driver.
+         - DO NOT include 'Schumacher' (Movie) or 'Rush' (Movie).
+         - EXECUTE: `get_ai_picks(movie_names_list=['Formula 1: Drive to Survive', ...], specific_type='tv')`.
+       
+       - IF User says "Movies like F1":
+         - Target is **MOVIES**.
+         - THINK: Rush, Ford v Ferrari, Senna.
+         - EXECUTE: `get_ai_picks(..., specific_type='movie')`.
 
-    3. **Complex Recommendations:**
-       - "Thriller like Death Note" -> `get_ai_picks`.
-       - "Anime" -> `get_ai_picks(..., specific_type='anime')`.
+    3. **Vibe/Topic Match:**
+       - Query: "Sci-fi about space", "Western movies".
+       - Action: THINK of 5-6 **High Quality** matches.
+       - Avoid random/loose matches. If they want "F1", give "Racing". Don't give random dramas.
+       - USE: `get_ai_picks(...)`.
 
-    4. **Franchise / Order:** "Marvel watch order" -> LIST ALL (20+) -> `get_ai_picks`.
+    4. **Franchise/Order:** "Marvel watch order" -> LIST ALL (20+) -> `get_ai_picks`.
     
-    5. **Filters:** "Hindi movies released in 2023" -> `discover_media`.
+    5. **Binge/Short:** "Anime in 1 day" -> USE `get_ai_picks(..., specific_type='anime')`.
     
     IMPORTANT: Just execute the tool. Say "Here are the top picks:".
     """
@@ -174,7 +179,7 @@ with st.sidebar:
     st.divider()
     if st.button("Clear Chat History"):
         st.session_state.history = []
-        st.session_state.chips = random.sample(suggestion_pool, 4)
+        st.session_state.chips = random.sample(st.session_state.chips, 4)
         st.rerun()
 
 # --- HELPER: DETAIL PAGE ---
@@ -253,7 +258,7 @@ else:
             if st.button(prompt, use_container_width=True):
                 query_input = prompt
 
-    # HISTORY (Loop with duplicate key fix retained)
+    # HISTORY
     for msg_idx, msg in enumerate(st.session_state.history):
         with st.chat_message(msg["role"]):
             if msg["type"] == "text":
@@ -264,11 +269,11 @@ else:
                     with cols[item_idx % 5]:
                         st.image(item['poster_url'], use_container_width=True)
                         
+                        # Icon Logic
                         type_icon = "📺" if item['type'] == 'tv' else "🎬"
                         st.markdown(f"<div class='type-icon'>{type_icon} {item['type'].upper()}</div>", unsafe_allow_html=True)
                         st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
                         
-                        # Unique Key Button Fix Retained
                         if st.button("View Details", key=f"btn_{msg_idx}_{item['id']}_{item_idx}"):
                             full_details = tools.get_media_details(item['id'], item['type'])
                             st.session_state.selected_movie = full_details
@@ -278,7 +283,7 @@ else:
     if query_input:
         user_text = query_input
     else:
-        user_text = st.chat_input("Try: '3hr Rom-Com movie' or 'Sci-fi about space'")
+        user_text = st.chat_input("Try: 'TV Shows like F1' or 'Comedy Anime'")
 
     if user_text:
         st.session_state.history.append({"role": "user", "type": "text", "content": user_text})
@@ -306,7 +311,7 @@ else:
                                 st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
                                 chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="Grid shown.")], role="model"))
                                 st.rerun()
-                            else: st.error("No results found.")
+                            else: st.error("No results found. Try a simpler query.")
                     else:
                         st.markdown(response.text)
                         st.session_state.history.append({"role": "assistant", "type": "text", "content": response.text})
