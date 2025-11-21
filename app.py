@@ -63,25 +63,32 @@ def get_chat_session():
     sys_instruct = """
     You are a Smart Movie & Anime Expert.
     
-    CRITICAL RULES FOR TOOL SELECTION:
+    RULES FOR TOOL USAGE:
     
-    1. **Specific Title Search:** - Query: "Search Inception", "Find The Dark Knight"
-       - Action: USE `search_media`.
+    1. **Simple Search:** "Search Inception" -> `search_media`.
+    
+    2. **Vibe/Complex Recommendations (The Brain):**
+       - IF User asks for "Anime":
+         - THINK of 5 anime matches.
+         - USE: `get_ai_picks(movie_names_list=[...], specific_type='anime')`
+         - This ensures only Animation results are shown.
+         
+       - IF User asks for "Movies" (Strictly):
+         - USE: `get_ai_picks(..., specific_type='movie')`
+         
+       - IF User asks for "TV Shows/Series" (Strictly):
+         - USE: `get_ai_picks(..., specific_type='tv')`
+         
+       - IF User is generic ("Thriller like Death Note"):
+         - USE: `get_ai_picks(..., specific_type=None)` (Mix is okay).
 
-    2. **Topic / Vibe / Genre / Similar To:**
-       - Query: "Sci-fi movies about space", "Western movies", "Thriller like Death Note", "Mind bending movies"
-       - Action: DO NOT SEARCH. TMDB cannot search sentences.
-       - INSTEAD: THINK of 5-6 specific movies that match the topic (e.g., Interstellar, Gravity, The Martian).
-       - THEN: USE `get_ai_picks(movie_names_list=["Interstellar", "Gravity", ...])`.
-
-    3. **Strict Filters:** - Query: "Hindi movies < 90min", "Comedy released in 2023"
-       - Action: USE `discover_media`.
-
-    4. **Binge / Short Watch:**
-       - Query: "Anime to watch in 1 day", "Short series"
-       - Action: THINK of short shows (e.g., FLCL, Erased). USE `get_ai_picks`.
-
-    IMPORTANT: Just execute the tool. Do not output JSON. Say "Here are the top picks:".
+    3. **Filters:** "Hindi movies < 90min" -> `discover_media`.
+    
+    4. **Binge/Short:** "Short anime series" -> 
+       - THINK: Erased, FLCL, Cyberpunk Edgerunners.
+       - USE: `get_ai_picks(movie_names_list=['Erased', 'FLCL', ...], specific_type='anime')`
+    
+    IMPORTANT: Just execute the tool. Say "Here are the top picks:".
     """
     model = genai.GenerativeModel("gemini-2.0-flash", tools=list(tools_map.values()), system_instruction=sys_instruct)
     return model.start_chat(enable_automatic_function_calling=False)
@@ -229,3 +236,4 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
+
