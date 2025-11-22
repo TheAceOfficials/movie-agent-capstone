@@ -9,9 +9,9 @@ st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="
 # --- FINAL FIXED CSS (SIDEBAR BUTTON FIX) ---
 st.markdown("""
 <style>
-    /* 1. MAIN BACKGROUND - PURE BLACK */
+    /* 1. MAIN BACKGROUND - GREY */
     .stApp {
-        background-color: #000000 !important;
+        background-color: #2596be !important;
         color: #ffffff !important;
     }
     
@@ -352,3 +352,4 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
+
