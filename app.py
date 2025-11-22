@@ -11,7 +11,7 @@ st.markdown("""
 <style>
     /* 1. MAIN BACKGROUND - GREY */
     .stApp {
-        background-color: #2596be !important;
+        background-color: #0f1116 !important;
         color: #ffffff !important;
     }
     
@@ -352,4 +352,5 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
+
 
