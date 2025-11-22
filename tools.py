@@ -1,180 +1,173 @@
-import os
+# tools.py (add/replace these functions)
 import requests
-import streamlit as st
-from datetime import datetime
-
-# Setup API Key
-try:
-    TMDB_API_KEY = st.secrets["TMDB_API_KEY"]
-except:
-    from dotenv import load_dotenv
-    load_dotenv()
-    TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+import time
+import logging
 
 BASE_URL = "https://api.themoviedb.org/3"
-IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
+TMDB_API_KEY = None  # set via init()
 
-def fetch_data(endpoint, params={}):
-    params['api_key'] = TMDB_API_KEY
+def init(api_key: str):
+    global TMDB_API_KEY
+    TMDB_API_KEY = api_key
+
+# safe fetch helper
+def fetch_tmdb(endpoint: str, params: dict = None, method="GET", timeout=10):
+    params = params or {}
+    if not TMDB_API_KEY:
+        raise RuntimeError("TMDB_API_KEY not configured. Call tools.init(api_key) first.")
+    params["api_key"] = TMDB_API_KEY
     url = f"{BASE_URL}{endpoint}"
-    response = requests.get(url, params=params)
-    return response.json()
+    try:
+        resp = requests.request(method, url, params=params, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.HTTPError as e:
+        logging.warning(f"[TMDB] HTTP error {resp.status_code} for {url} : {resp.text}")
+        return {}
+    except requests.exceptions.RequestException as e:
+        logging.warning(f"[TMDB] Request error for {url} : {e}")
+        return {}
+    except ValueError:
+        logging.warning(f"[TMDB] Invalid JSON from {url}")
+        return {}
 
-def format_results(data, default_media_type="movie"):
-    results = []
-    if 'results' in data:
-        for item in data['results'][:10]: # Top 10 results layenge
-            # Ignore people/actors in search results
-            if item.get('media_type') == 'person':
-                continue
+# cache provider mapping in memory
+_provider_cache = {"movie": None, "tv": None, "timestamp": 0}
+def get_provider_id_by_name(name: str, media_type="movie", region="IN"):
+    """Return provider id for a human name like 'netflix' or 'crunchyroll'."""
+    name_key = (name or "").strip().lower()
+    # refresh once per 24h
+    if not _provider_cache[media_type] or (time.time() - _provider_cache.get("timestamp", 0) > 24*3600):
+        endpoint = "/watch/providers/movie" if media_type=="movie" else "/watch/providers/tv"
+        resp = fetch_tmdb(endpoint, params={"language":"en-US", "page":1})
+        results = resp.get("results", []) if resp else []
+        mapping = {}
+        for p in results:
+            provider_name = (p.get("provider_name") or "").lower()
+            mapping[provider_name] = p.get("provider_id")
+        _provider_cache[media_type] = mapping
+        _provider_cache["timestamp"] = time.time()
+    mapping = _provider_cache[media_type] or {}
+    # try exact then substring match
+    if name_key in mapping:
+        return mapping[name_key]
+    for k,v in mapping.items():
+        if name_key in k:
+            return v
+    return None
 
-            path = item.get('poster_path')
-            full_img = f"{IMAGE_BASE_URL}{path}" if path else "https://via.placeholder.com/500x750?text=No+Poster"
-            title = item.get('title') if 'title' in item else item.get('name')
-            date = item.get('release_date') if 'release_date' in item else item.get('first_air_date')
-            rating = round(item.get('vote_average', 0), 1)
-            
-            # CRITICAL FIX: Ensure Media Type is captured correctly
-            media_type = item.get('media_type') or default_media_type
-            
-            results.append({
-                "id": item.get('id'),
-                "title": title,
-                "overview": item.get('overview'),
-                "rating": rating,
-                "date": date,
-                "poster_url": full_img,
-                "type": media_type  # Ye batayega ki Movie hai ya Series
-            })
-    return results
+# genre lookup helpers (small cache)
+_genre_cache = {"movie": {}, "tv": {}, "ts": 0}
+def ensure_genres(media_type="movie"):
+    if _genre_cache["ts"] and (time.time() - _genre_cache["ts"] < 24*3600) and _genre_cache.get(media_type):
+        return _genre_cache[media_type]
+    endpoint = "/genre/movie/list" if media_type=="movie" else "/genre/tv/list"
+    data = fetch_tmdb(endpoint, params={"language":"en-US"})
+    result = { g["name"].lower(): g["id"] for g in data.get("genres", []) } if data else {}
+    _genre_cache[media_type] = result
+    _genre_cache["ts"] = time.time()
+    return result
 
-# --- TOOLS ---
-def search_media(query):
-    data = fetch_data("/search/multi", {"query": query})
-    return format_results(data)
-
-def get_trending():
-    data = fetch_data("/trending/all/day")
-    return format_results(data)
-
-def get_recommendations(media_id, media_type="movie"):
-    endpoint = f"/{media_type}/{media_id}/recommendations"
-    data = fetch_data(endpoint)
-    return format_results(data, media_type)
-
-def discover_media(media_type="movie", genre_id=None, language=None, max_runtime=None, include_upcoming=False):
-    endpoint = f"/discover/{media_type}"
-    params = {"sort_by": "popularity.desc"}
-    if language: params['with_original_language'] = language
-    if max_runtime and media_type == 'movie': params['with_runtime.lte'] = max_runtime
-    if not include_upcoming:
-        today = datetime.now().strftime("%Y-%m-%d")
-        params['primary_release_date.lte'] = today
-        params['air_date.lte'] = today
-    data = fetch_data(endpoint, params)
-    return format_results(data, media_type)
-
-# --- UPDATED SMART TOOL (Strict Filtering) ---
-def get_ai_picks(movie_names_list, specific_type=None):
-    """
-    Fetches data for movies suggested by Gemini.
-    specific_type: 'movie', 'tv', or 'anime' (to filter strictly)
-    """
-    results = []
-    for name in movie_names_list:
-        # Hum zyada results mangenge taaki filter kar sakein
-        data = fetch_data("/search/multi", {"query": name})
-        
-        found_match = False
-        if 'results' in data:
-            for item in data['results']:
-                # Skip people
-                if item.get('media_type') == 'person': continue
-                
-                # --- STRICT FILTERING LOGIC ---
-                is_valid = True
-                
-                if specific_type == 'anime':
-                    # Anime hona chahiye (Genre ID 16 = Animation)
-                    genre_ids = item.get('genre_ids', [])
-                    if 16 not in genre_ids: 
-                        is_valid = False # Ye Animation nahi hai, skip karo
-                
-                elif specific_type == 'movie':
-                    if item.get('media_type') != 'movie': is_valid = False
-                    
-                elif specific_type == 'tv':
-                    if item.get('media_type') != 'tv': is_valid = False
-
-                # Agar valid hai, toh isse add karo aur loop break karo
-                if is_valid:
-                    formatted = format_results({'results': [item]})
-                    if formatted:
-                        results.append(formatted[0])
-                        found_match = True
-                        break 
-            
-            # Agar strict filter ke baad bhi kuch nahi mila, toh fallback (First result)
-            # Lekin Anime ke case mai fallback nahi karenge taaki galti na ho
-            if not found_match and specific_type != 'anime':
-                 if len(data['results']) > 0:
-                    formatted = format_results({'results': [data['results'][0]]})
-                    if formatted: results.append(formatted[0])
-
-    return results
-
-def get_media_details(media_id, media_type="movie"):
-    """ Fetches Deep Details (Budget, Trailer, OTT, Cast, Runtime) """
-    details = fetch_data(f"/{media_type}/{media_id}")
-    
-    # 1. Cast / Credits
-    credits = fetch_data(f"/{media_type}/{media_id}/credits")
-    cast = []
-    if 'cast' in credits:
-        cast = [c['name'] for c in credits['cast'][:5]] # Top 5 actors
-
-    # 2. Trailer
-    videos = fetch_data(f"/{media_type}/{media_id}/videos")
-    trailer_key = None
-    if 'results' in videos:
-        for v in videos['results']:
-            if v['site'] == 'YouTube' and v['type'] == 'Trailer':
-                trailer_key = v['key']
-                break
-    
-    # 3. OTT Providers (India)
-    providers = fetch_data(f"/{media_type}/{media_id}/watch/providers")
-    ott_platforms = []
-    if 'results' in providers and 'IN' in providers['results']:
-        in_providers = providers['results']['IN']
-        if 'flatrate' in in_providers:
-            ott_platforms = [p['provider_name'] for p in in_providers['flatrate']]
-    
-    # 4. Runtime Logic (Series vs Movie)
-    runtime_val = "N/A"
-    if 'runtime' in details and details['runtime']:
-        runtime_val = f"{details['runtime']} min"
-    elif 'episode_run_time' in details and details['episode_run_time']:
-        runtime_val = f"{details['episode_run_time'][0]} min"
-    
-    # Data Packaging
-    return {
-        "id": details.get('id'),
-        "title": details.get('title') or details.get('name'),
-        "overview": details.get('overview'),
-        "poster_url": f"{IMAGE_BASE_URL}{details.get('poster_path')}" if details.get('poster_path') else None,
-        "rating": round(details.get('vote_average', 0), 1),
-        "date": details.get('release_date') or details.get('first_air_date'),
-        "runtime": runtime_val, # Fixed Runtime
-        "genres": [g['name'] for g in details.get('genres', [])], # Fixed Genres
-        "trailer_url": f"https://www.youtube.com/watch?v={trailer_key}" if trailer_key else None,
-        "ott": ott_platforms,
-        "type": media_type,
-        "cast": cast,
-        # MOVIE Specific
-        "budget": f"${details.get('budget'):,}" if details.get('budget') else None,
-        "revenue": f"${details.get('revenue'):,}" if details.get('revenue') else None,
-        # TV Specific
-        "seasons": details.get('number_of_seasons'),
-        "episodes": details.get('number_of_episodes')
+def normalize_item(item: dict, default_media_type="movie"):
+    """Return normalized dict with consistent keys used by app."""
+    media_type = item.get("media_type") or default_media_type
+    result = {
+        "id": item.get("id"),
+        "title": item.get("title") or item.get("name"),
+        "poster_path": item.get("poster_path"),
+        "overview": item.get("overview"),
+        "release_date": item.get("release_date") or item.get("first_air_date"),
+        "media_type": media_type,
+        "vote_average": item.get("vote_average"),
     }
+    return result
+
+def discover_media_with_filters(media_type="movie", region="IN", max_runtime_minutes=None,
+                                provider_names=None, genres=None, language=None,
+                                original_language=None, primary_release_before=None,
+                                page=1, max_pages=1):
+    """
+    Discover movies or tv shows using TMDB discover API with flexible filters.
+    - media_type: 'movie' or 'tv'
+    - provider_names: list of provider names (strings) e.g. ['netflix','crunchyroll']
+    - max_runtime_minutes: integer in minutes (applies to movies; TV uses episode runtime if supported)
+    - genres: list of genre names (strings) -> mapped to TMDB genre ids
+    - language: e.g. 'hi' (for Hindi audio) — used in result filtering (TMDB doesn't always provide dubbing info)
+    - original_language: e.g. 'ja' for Japanese (useful for anime)
+    - primary_release_before: 'YYYY-MM-DD' to only include up-to-date content
+    Returns a list of normalized items.
+    """
+    params = {
+        "page": page,
+        "sort_by": "popularity.desc",
+        "include_adult": False,
+        "language":"en-US"
+    }
+    # provider ids
+    if provider_names:
+        pids = []
+        for p in provider_names:
+            pid = get_provider_id_by_name(p, media_type=media_type, region=region)
+            if pid:
+                pids.append(str(pid))
+        if pids:
+            params["with_watch_providers"] = ",".join(pids)
+            params["watch_region"] = region
+
+    # genres mapping
+    if genres:
+        gmap = ensure_genres(media_type=media_type)
+        gid_list = []
+        for g in genres:
+            gid = gmap.get(g.lower())
+            if gid:
+                gid_list.append(str(gid))
+        if gid_list:
+            params["with_genres"] = ",".join(gid_list)
+
+    # runtime filter for movies
+    if max_runtime_minutes and media_type == "movie":
+        # TMDB supports with_runtime.lte
+        params["with_runtime.lte"] = int(max_runtime_minutes)
+
+    # for TV, try episode runtime filter (not guaranteed), using with_runtime.lte as best-effort
+    if max_runtime_minutes and media_type == "tv":
+        params["with_runtime.lte"] = int(max_runtime_minutes)
+
+    if primary_release_before:
+        if media_type == "movie":
+            params["primary_release_date.lte"] = primary_release_before
+        else:
+            params["first_air_date.lte"] = primary_release_before
+
+    # optional original_language filtering (useful for anime)
+    if original_language:
+        params["with_original_language"] = original_language
+
+    # call correct endpoint
+    endpoint = "/discover/movie" if media_type == "movie" else "/discover/tv"
+    results = []
+    for p in range(page, page + max_pages):
+        params["page"] = p
+        data = fetch_tmdb(endpoint, params=params)
+        if not data:
+            break
+        page_results = data.get("results", [])
+        for item in page_results:
+            # extra filter: language/dub heuristics
+            # If user asked for Hindi dub specifically, TMDB does not reliably tag dubs;
+            # we can filter by 'spoken_languages' or look for 'hi' in original_language as fallback.
+            # For now, attach available spoken_languages if present (later UI can display)
+            norm = normalize_item(item, default_media_type=media_type)
+            results.append(norm)
+        # break early if single page wanted
+        if p >= data.get("total_pages", 1) or p >= page + max_pages - 1:
+            break
+    return results
+
+def search_fallback(query, media_type="movie"):
+    """Use TMDB search endpoint if discover returned empty or user gave explicit title."""
+    endpoint = "/search/movie" if media_type=="movie" else "/search/tv"
+    data = fetch_tmdb(endpoint, params={"query": query, "language":"en-US", "page":1})
+    res = data.get("results", []) if data else []
+    return [normalize_item(r, default_media_type=media_type) for r in res]
