@@ -329,7 +329,7 @@ else:
     if query_input:
         user_text = query_input
     else:
-        user_text = st.chat_input("Try: 'TV Shows like F1' or 'Comedy Anime'")
+        user_text = st.chat_input("Try: 'Suspense anime like Death Note' or 'Rom-Com Movie'")
 
     if user_text:
         st.session_state.history.append({"role": "user", "type": "text", "content": user_text})
@@ -371,6 +371,7 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
+
 
 
 
