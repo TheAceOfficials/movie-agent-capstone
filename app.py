@@ -282,7 +282,7 @@ def show_details_page():
             c2.metric("Episodes", movie['episodes'])
             
         st.divider()
-        st.subheader("📺 Where to Watch (India)")
+        st.subheader("https://github.com/TheAceOfficials/movie-agent-capstone/blob/main/icons/series.png Where to Watch (India)")
         if movie['ott']: st.success(f"Available on: {', '.join(movie['ott'])}")
         else: st.warning("Not streaming on major platforms in India right now.")
 
@@ -316,7 +316,7 @@ else:
                     with cols[item_idx % 5]:
                         st.image(item['poster_url'], use_container_width=True)
                         
-                        type_icon = "📺" if item['type'] == 'tv' else "🎬"
+                        type_icon = "https://github.com/TheAceOfficials/movie-agent-capstone/blob/main/icons/series.png" if item['type'] == 'tv' else "🎬"
                         st.markdown(f"<div class='type-icon'>{type_icon} {item['type'].upper()}</div>", unsafe_allow_html=True)
                         st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
                         
@@ -371,6 +371,7 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
+
 
 
 
