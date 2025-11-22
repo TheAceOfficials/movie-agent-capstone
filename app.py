@@ -4,12 +4,12 @@ import tools
 import random
 
 # --- CONFIG ---
-st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="VibBar AI", page_icon="🍿", layout="wide", initial_sidebar_state="expanded")
 
 # --- FINAL FIXED CSS (SIDEBAR BUTTON FIX) ---
 st.markdown("""
 <style>
-    /* 1. MAIN BACKGROUND - GREY */
+    /* 1. MAIN BACKGROUND - Woodsmoke */
     .stApp {
         background-color: #0f1116 !important;
         color: #ffffff !important;
@@ -142,7 +142,26 @@ if "chips" not in st.session_state:
         "👊 Action anime for beginners", "🧠 Psychological anime like Death Note",
         "⏳ Short anime series (12 episodes)", "🧟 Zombie apocalypse movies",
         "🤠 Best Western movies", "🤖 Movies about AI taking over",
-        "💰 Heist movies like Money Heist", "🥊 Sports drama movies"
+        "🕵️ Detective mystery movies with shocking twists", "👽 Alien invasion sci-fi movies",
+        "🧛 Vampire movies for supernatural fans", "🔥 Top underrated gems you must watch",
+        "🎖️ War movies based on true events", "🎧 Musical movies with great soundtracks",
+        "👨‍👩‍👧 Family-friendly movies for a chill night", "🌧️ Dark, rainy-night thriller movies",
+        "👦 Coming-of-age films everyone relates to", "🎭 Movies with Oscar-winning performances",
+        "🔥 Revenge-based movies with intense plots", "🚓 Crime dramas with mafia & gangs",
+        "💫 Feel-good movies for late-night watch", "💎 Visually stunning movies (cinematography lovers)",
+        "⚔️ Sword-based anime like Demon Slayer", "🌀 Time-travel anime mind twist",
+        "😂 Wholesome comedy anime for chill time", "💀 Dark anime with mature themes",
+        "❤️ Romance anime with emotional payoff", "🚀 Space-themed sci-fi anime",
+        "🧩 Plot twist anime that shocks you", "🐉 Fantasy adventure anime classics",
+        "🤠 Ninja/samurai anime fans will love", "👨‍⚖️ Courtroom drama shows that Suits vibe",
+        "🔥 Underrated series with only 1 season", "🤯 Twisty series like Dark",
+        "👮 Crime investigation shows like True Detective", "💘 Romantic drama series for binge-watch",
+        "🎃 Horror mini series for a weekend", "🎢 Adventure thrillers that keep you on edge",
+        "💥 Explosive action movies with insane stunts", "💖 Heart-melting romantic comedies",
+        "🧙‍♂️ Magic & wizard fantasy movies", "🕳️ Dark psychological thrillers you can’t forget",
+        "💰 Heist movies like Money Heist", "🌍 Epic adventure movies to escape reality",
+        "💘 Romantic movies that feel wholesome", "🔪 Serial-killer thrillers you can’t predict",
+        "🥊 Sports drama movies"
     ]
     st.session_state.chips = random.sample(suggestion_pool, 4)
 
@@ -276,7 +295,7 @@ def show_details_page():
 if st.session_state.selected_movie:
     show_details_page()
 else:
-    st.title("🍿 AI Entertainment Hub")
+    st.title("🍿 VibBar AI")
     
     # DYNAMIC CHIPS
     cols = st.columns(4)
@@ -352,5 +371,6 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
+
 
 
