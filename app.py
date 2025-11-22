@@ -1,297 +1,354 @@
-"""
-app.py - Streamlit front-end for Movie-Agent Capstone
-
-This version:
-- Loads TMDB key from st.secrets or environment
-- Initializes tools.init(api_key)
-- Provides a robust parse_user_query() to extract media_type, duration, providers, genres, language/dub
-- Calls tools.discover_media_with_filters and search_fallback reliably using correct endpoints
-- Presents results in a responsive grid with posters and metadata
-- Provides helpful fallbacks and user messages
-"""
-
-import os
 import streamlit as st
+import google.generativeai as genai
+import tools
 import random
-from datetime import datetime
-from typing import List
-import tools  # assumes tools.py is in same directory
-import time
-import math
 
-st.set_page_config(page_title="Movie Agent", layout="wide", initial_sidebar_state="expanded")
+# --- CONFIG ---
+st.set_page_config(page_title="AI Entertainment Hub", page_icon="🍿", layout="wide", initial_sidebar_state="expanded")
 
-# --- Load TMDB key safely
-TMDB_KEY = None
-# First try Streamlit secrets
-try:
-    TMDB_KEY = st.secrets.get("TMDB_API_KEY")
-except Exception:
-    TMDB_KEY = None
-# fallback to environment
-if not TMDB_KEY:
-    TMDB_KEY = os.getenv("TMDB_API_KEY")
-
-if not TMDB_KEY:
-    st.warning("TMDB API key not found. Set TMDB_API_KEY in Streamlit Secrets or environment. Basic UI will still work but API calls will fail.")
-else:
-    tools.init(TMDB_KEY)
-
-# --- small parser & synonyms
-import re
-MEDIA_KEYWORDS = {
-    "movie": ["movie", "film", "films", "movies", "feature"],
-    "tv": ["tv", "series", "show", "shows", "tvshow", "tv shows", "serieses"],
-    "anime": ["anime", "animes"],
-    "documentary": ["documentary", "documentaries", "docu"],
-}
-PLATFORM_CANON = {
-    "amazon": "amazon prime video",
-    "amazon prime": "amazon prime video",
-    "prime": "amazon prime video",
-    "netflix": "netflix",
-    "disney": "disney plus",
-    "hotstar": "disney plus hotstar",
-    "crunchyroll": "crunchyroll",
-    "mxplayer": "mx player",
-    "hulu": "hulu",
-    "sonyliv": "sony liv",
-    "sony liv": "sony liv",
-    "youTube": "youtube",
-    "youtube": "youtube",
-}
-PLATFORM_KEYWORDS = list(PLATFORM_CANON.keys())
-
-GENRE_KEYWORDS = [
-    "rom-com","romcom","romantic comedy","romance","action","thriller","sci-fi","science fiction",
-    "comedy","drama","horror","animated","animation","fantasy","adventure","mystery","crime","anime"
-]
-
-def extract_duration_minutes(text: str):
-    text = (text or "").lower()
-    # hours patterns
-    m = re.search(r'under\s+(\d+)\s*hr', text) or re.search(r'under\s+(\d+)\s*hours?', text)
-    if not m:
-        m = re.search(r'less than\s+(\d+)\s*hr', text) or re.search(r'less than\s+(\d+)\s*hours?', text)
-    if m:
-        try:
-            hours = int(m.group(1))
-            return hours * 60
-        except:
-            pass
-    # pattern: "under 120 min"
-    m2 = re.search(r'under\s+(\d+)\s*min', text) or re.search(r'under\s+(\d+)\s*minutes', text)
-    if m2:
-        return int(m2.group(1))
-    # pattern like "< 2 hours"
-    m3 = re.search(r'(<|less than)\s*(\d+)\s*(hours|hr)', text)
-    if m3:
-        try:
-            hours = int(m3.group(2))
-            return hours * 60
-        except:
-            pass
-    return None
-
-def parse_user_query(text: str):
-    t = (text or "").lower()
-    res = {
-        "media_type": "any",
-        "genres": [],
-        "providers": [],
-        "max_duration_minutes": None,
-        "language": None,
-        "dub_required": False,
-        "title": None
+# --- FINAL FIXED CSS (SIDEBAR BUTTON FIX) ---
+st.markdown("""
+<style>
+    /* 1. MAIN BACKGROUND - PURE BLACK */
+    .stApp {
+        background-color: #000000 !important;
+        color: #ffffff !important;
     }
-    # detect media type
-    for k, kws in MEDIA_KEYWORDS.items():
-        for kw in kws:
-            if kw in t:
-                res["media_type"] = k
-                break
-        if res["media_type"] != "any" and res["media_type"] == k:
-            break
+    
+    /* 2. SIDEBAR - SLIGHTLY LIGHTER BLACK */
+    section[data-testid="stSidebar"] {
+        background-color: #0e0e0e !important;
+        border-right: 1px solid #222;
+    }
+    
+    /* 3. HEADER & SIDEBAR TOGGLE FIX (CRITICAL) */
+    header[data-testid="stHeader"] {
+        background-color: transparent !important; /* Header ko transparent kiya */
+        visibility: visible !important; /* Isse visible rakha taaki button dikhe */
+    }
+    /* Jo upar coloured line aati hai usse chupana */
+    div[data-testid="stDecoration"] {
+        visibility: hidden;
+    }
+    /* Sidebar Toggle Button ko Red karna taaki dikhe */
+    button[kind="header"] {
+        color: #E50914 !important; 
+    }
 
-    # providers
-    for p in PLATFORM_KEYWORDS:
-        if p in t:
-            res["providers"].append(PLATFORM_CANON.get(p, p))
+    /* 4. CHAT INPUT FIX */
+    .stChatInputContainer {
+        background-color: #000000 !important;
+        padding-bottom: 20px;
+        border-top: 1px solid #333;
+    }
+    div[data-testid="stChatInput"] {
+        background-color: transparent !important;
+    }
+    div[data-testid="stChatInput"] textarea {
+        background-color: #161616 !important;
+        color: white !important;
+        border: 1px solid #333 !important;
+        border-radius: 10px !important;
+    }
+    div[data-testid="stChatInput"] textarea:focus {
+        border-color: #E50914 !important;
+        box-shadow: none !important;
+    }
 
-    # genres
-    for g in GENRE_KEYWORDS:
-        if g in t:
-            res["genres"].append(g.replace("-", " "))
+    /* 5. IMAGE FIX */
+    div[data-testid="stImage"] {
+        border-radius: 12px;
+        overflow: hidden; 
+        padding: 2px;
+        transition: transform 0.2s;
+        background-color: transparent !important;
+        margin-bottom: 10px !important;
+    }
+    div[data-testid="stImage"] img {
+        border-radius: 10px;
+        object-fit: cover;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 2/3;
+    }
+    div[data-testid="stImage"]:hover {
+        transform: scale(1.02);
+        background: linear-gradient(45deg, #ffffff, #888888);
+        box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+        z-index: 10;
+    }
+    
+    /* 6. TITLE STYLING */
+    .movie-title {
+        font-weight: bold;
+        font-size: 14px;
+        margin-top: 8px;
+        height: 40px;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        text-overflow: ellipsis;
+        color: #e0e0e0;
+        text-align: left;
+    }
+    
+    /* 7. BUTTONS */
+    div[data-testid="stButton"] button {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #333;
+        background-color: #1a1a1a;
+        color: #fff;
+    }
+    div[data-testid="stButton"] button:hover {
+        border-color: #E50914;
+        color: #fff;
+        background-color: #000;
+    }
 
-    # duration
-    dur = extract_duration_minutes(t)
-    if dur:
-        res["max_duration_minutes"] = dur
+    /* 8. BADGES & TAGS */
+    .type-icon {font-size: 11px; color: #aaa; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1px;}
+    .detail-header {font-size: 35px; font-weight: bold; color: #E50914; margin-bottom: 10px;}
+    .meta-info {font-size: 16px; color: #ccc; margin-bottom: 15px;}
+    .genre-tag {background-color: #222; color: #fff; padding: 5px 12px; border-radius: 15px; font-size: 13px; margin-right: 8px; border: 1px solid #444; display: inline-block;}
+    .watchlist-item {padding: 10px; background-color: #161616; margin-bottom: 5px; border-radius: 5px; border-left: 3px solid #E50914;}
+    
+</style>
+""", unsafe_allow_html=True)
 
-    # language/dub detection
-    if "hindi dub" in t or "hindi dubbed" in t or "dub in hindi" in t:
-        res["language"] = "hi"
-        res["dub_required"] = True
-    elif "hindi" in t and ("dub" not in t):
-        res["language"] = "hi"
-    elif "japanese" in t or "japan" in t or "ja" in t:
-        res["language"] = "ja"
-
-    # quoted title detection
-    m = re.search(r'["\'](.+?)["\']', text)
-    if m:
-        res["title"] = m.group(1)
-
-    # "on <platform>" fallback
-    m2 = re.search(r'on\s+([a-z0-9\-\s]+)', t)
-    if m2 and not res["providers"]:
-        possible = m2.group(1).strip().split()[0]
-        if possible in PLATFORM_CANON:
-            res["providers"].append(PLATFORM_CANON[possible])
-
-    # dedupe
-    res["providers"] = list(dict.fromkeys(res["providers"]))
-    res["genres"] = list(dict.fromkeys(res["genres"]))
-    return res
-
-# --- UI helpers
-def show_results_grid(items: List[dict], cols_per_row: int = 4):
-    if not items:
-        st.info("Koi result nahi mila — filters broadening ke liye 'Broaden search' try karein.")
-        return
-    # responsive columns_per_row based on screen width not available reliably in Streamlit
-    cols = st.columns(cols_per_row)
-    idx = 0
-    for it in items:
-        c = cols[idx % cols_per_row]
-        with c:
-            title = it.get("title") or "Untitled"
-            poster = tools.poster_url(it.get("poster_path"))
-            if poster:
-                st.image(poster, use_column_width="always", caption=title)
-            else:
-                st.write("No image")
-                st.markdown(f"**{title}**")
-            meta = []
-            if it.get("release_date"):
-                meta.append(str(it.get("release_date")))
-            if it.get("vote_average"):
-                meta.append(f"⭐ {it.get('vote_average')}")
-            if meta:
-                st.caption(" • ".join(meta))
-            if it.get("overview"):
-                with st.expander("Overview"):
-                    st.write(it.get("overview"))
-        idx += 1
-        if idx % cols_per_row == 0 and idx < len(items):
-            cols = st.columns(cols_per_row)
-
-# --- Sidebar controls
-st.sidebar.title("Filters (optional)")
-default_region = st.sidebar.selectbox("Region (watch providers)", ["IN", "US", "GB", "CA"], index=0)
-cols_setting = st.sidebar.slider("Posters per row", min_value=1, max_value=6, value=4)
-auto_broaden = st.sidebar.checkbox("Auto-broaden when no results", value=True)
-
-st.title("🎬 Movie Agent - Smart Search")
-st.write("Type natural queries like: `mujhe rom-com futuristic rom-com series btao jo netflix pr ho`")
-st.write("You can ask by type, duration (under 2hr), platform (Netflix/Crunchyroll), language/dub etc.")
-
-# Input area
-user_text = st.text_input("Ask me for movies/series/anime/documentaries (Hindi/English supported):", value="", placeholder="e.g. mujhe romcom movies under 2hr on netflix")
-col1, col2 = st.columns([4,1])
-with col1:
-    submit_query = st.button("Search")
-with col2:
-    clear_btn = st.button("Clear")
-
-if clear_btn:
-    st.experimental_rerun()
-
-if submit_query and user_text.strip() == "":
-    st.warning("Query empty — kuch likh ke try karo.")
+# --- API SETUP ---
+try:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+except:
+    st.error("Secrets not found.")
     st.stop()
 
-if submit_query:
-    st.session_state.last_query = user_text
-    parsed = parse_user_query(user_text)
-    st.write("Detected filters:", parsed)
+genai.configure(api_key=api_key)
 
-    # decide media_type fallback logic
-    media_type = parsed["media_type"]
-    if media_type == "any":
-        # prefer movie by default but if user said series/episodes prefer tv
-        media_type = "movie"
+# --- SESSION STATE ---
+if "selected_movie" not in st.session_state:
+    st.session_state.selected_movie = None
+if "history" not in st.session_state:
+    st.session_state.history = []
+if "watchlist" not in st.session_state:
+    st.session_state.watchlist = []
+if "chips" not in st.session_state:
+    suggestion_pool = [
+        "🔥 Trending movies today", "🤯 Mind-bending thrillers like Inception",
+        "🤣 Comedy movies to lift mood", "🏎️ High octane action movies",
+        "👻 Horror movies based on true stories", "🇮🇳 Best Bollywood movies of 90s",
+        "🚀 Sci-fi movies about space", "🥺 Emotional movies that make you cry",
+        "👊 Action anime for beginners", "🧠 Psychological anime like Death Note",
+        "⏳ Short anime series (12 episodes)", "🧟 Zombie apocalypse movies",
+        "🤠 Best Western movies", "🤖 Movies about AI taking over",
+        "💰 Heist movies like Money Heist", "🥊 Sports drama movies"
+    ]
+    st.session_state.chips = random.sample(suggestion_pool, 4)
 
-    # special handling: anime -> attempt to search tv (many anime are series)
-    original_lang = None
-    genres = parsed["genres"] or None
-    if parsed["media_type"] == "anime":
-        # make sure animation genre included and prefer original_language 'ja'
-        original_lang = "ja"
-        if genres:
-            if "animation" not in [g.lower() for g in genres]:
-                genres = genres + ["Animation"]
-        else:
-            genres = ["Animation"]
-        # many anime are TV; give user TV unless they explicitly asked for movie
-        media_type = "tv"
+# --- CACHED MODEL ---
+@st.cache_resource
+def get_chat_session():
+    tools_map = {
+        'search_media': tools.search_media,
+        'get_trending': tools.get_trending,
+        'get_recommendations': tools.get_recommendations,
+        'discover_media': tools.discover_media,
+        'get_ai_picks': tools.get_ai_picks
+    }
+    
+    sys_instruct = """
+    You are a Smart Movie & Anime Expert.
+    
+    CRITICAL RULES (FOLLOW STRICTLY):
+    
+    1. **Simple Search:** "Search Inception" -> `search_media`.
+    
+    2. **Targeted Type (STRICT MODE):**
+       - IF User says "TV Shows like F1": 
+         - Target is **TV SHOWS**. 
+         - THINK: Drive to Survive, Le Mans: Racing is Everything, Grand Prix Driver.
+         - DO NOT include 'Schumacher' (Movie) or 'Rush' (Movie).
+         - EXECUTE: `get_ai_picks(movie_names_list=['Formula 1: Drive to Survive', ...], specific_type='tv')`.
+       
+       - IF User says "Movies like F1":
+         - Target is **MOVIES**.
+         - THINK: Rush, Ford v Ferrari, Senna.
+         - EXECUTE: `get_ai_picks(..., specific_type='movie')`.
 
-    providers = parsed["providers"] or None
-    max_runtime = parsed["max_duration_minutes"] or None
+    3. **Vibe/Topic Match:**
+       - Query: "Sci-fi about space", "Western movies".
+       - Action: THINK of 5-6 **High Quality** matches.
+       - Avoid random/loose matches. If they want "F1", give "Racing". Don't give random dramas.
+       - USE: `get_ai_picks(...)`.
 
-    # perform discover with spinner
-    with st.spinner("Searching TMDB..."):
-        try:
-            items = tools.discover_media_with_filters(
-                media_type=media_type,
-                region=default_region,
-                max_runtime_minutes=max_runtime,
-                provider_names=providers,
-                genres=genres,
-                original_language=original_lang,
-                page=1,
-                max_pages=1,
-            )
-        except Exception as e:
-            st.error(f"Error during discovery: {e}")
-            items = []
+    4. **Franchise/Order:** "Marvel watch order" -> LIST ALL (20+) -> `get_ai_picks`.
+    
+    5. **Binge/Short:** "Anime in 1 day" -> USE `get_ai_picks(..., specific_type='anime')`.
+    
+    IMPORTANT: Just execute the tool. Say "Here are the top picks:".
+    """
+    model = genai.GenerativeModel("gemini-2.0-flash", tools=list(tools_map.values()), system_instruction=sys_instruct)
+    return model.start_chat(enable_automatic_function_calling=False)
 
-    # fallback: if no results and user included a quoted title or keywords, try search_fallback
-    if not items and parsed.get("title"):
-        with st.spinner("Trying title search fallback..."):
-            try:
-                items = tools.search_fallback(parsed["title"], media_type=media_type)
-            except Exception as e:
-                st.error(f"Search fallback error: {e}")
-                items = []
+chat = get_chat_session()
 
-    # second-level fallback: if still empty and auto_broaden, remove provider/runtime filters
-    if not items and auto_broaden:
-        st.info("No exact matches — broadening search (removing platform/duration filters)...")
-        with st.spinner("Broadening..."):
-            try:
-                items = tools.discover_media_with_filters(
-                    media_type=media_type,
-                    region=default_region,
-                    max_runtime_minutes=None,
-                    provider_names=None,
-                    genres=genres,
-                    original_language=original_lang,
-                    page=1,
-                    max_pages=1,
-                )
-            except Exception as e:
-                logging_msg = f"Error broadening: {e}"
-                st.warning(logging_msg)
-                items = []
-
-    # present results
-    st.subheader("Results")
-    if items:
-        show_results_grid(items, cols_per_row=cols_setting)
+# --- SIDEBAR ---
+with st.sidebar:
+    st.header("🍿 My Watchlist")
+    if st.session_state.watchlist:
+        for item in st.session_state.watchlist:
+            st.markdown(f"<div class='watchlist-item'>{item['title']} ({item['rating']}⭐)</div>", unsafe_allow_html=True)
+        if st.button("Clear Watchlist"):
+            st.session_state.watchlist = []
+            st.rerun()
     else:
-        st.warning("Koi results nahi mile. Try removing platform or duration filters, or rephrase your query.")
+        st.caption("Empty list.")
+    st.divider()
+    if st.button("Clear Chat History"):
+        st.session_state.history = []
+        st.session_state.chips = random.sample(st.session_state.chips, 4)
+        st.rerun()
 
-# small footer and info about dub availability limitation
-st.markdown("---")
-st.caption("Note: Dub/language availability isn't always reliably encoded in TMDB. For exact dubbing availability, check the provider (Netflix/Crunchyroll) directly.")
+# --- HELPER: DETAIL PAGE ---
+def show_details_page():
+    movie = st.session_state.selected_movie
+    if st.button("← Back to Search"):
+        st.session_state.selected_movie = None
+        st.rerun()
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if movie['poster_url']: st.image(movie['poster_url'], use_container_width=True)
+        
+        is_in_list = any(m['id'] == movie['id'] for m in st.session_state.watchlist)
+        if is_in_list:
+            st.button("✅ In Watchlist", disabled=True)
+        else:
+            if st.button("➕ Add to Watchlist"):
+                st.session_state.watchlist.append(movie)
+                st.rerun()
+
+    with col2:
+        st.markdown(f"<div class='detail-header'>{movie['title']}</div>", unsafe_allow_html=True)
+        
+        media_type = "TV Series" if movie['type'] == 'tv' else "Movie"
+        runtime_str = movie['runtime'] if movie['runtime'] else "N/A"
+        
+        st.markdown(f"""
+        <div class='meta-info'>
+            <span style='color: #E50914; font-weight: bold;'>{media_type}</span> • 
+            ⭐ {movie['rating']} • 
+            📅 {movie['date']} • 
+            ⏳ {runtime_str}
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if movie['genres']:
+            genre_html = ""
+            for g in movie['genres']:
+                genre_html += f"<span class='genre-tag'>{g}</span>"
+            st.markdown(f"<div style='margin-bottom: 20px;'>{genre_html}</div>", unsafe_allow_html=True)
+            
+        st.write(f"**Overview:** {movie['overview']}")
+        if movie['cast']: st.write(f"**Cast:** {', '.join(movie['cast'])}")
+        st.divider()
+        
+        c1, c2 = st.columns(2)
+        if movie['type'] == 'movie':
+            c1.metric("Budget", movie['budget'] if movie['budget'] else "N/A")
+            c2.metric("Revenue", movie['revenue'] if movie['revenue'] else "N/A")
+        else:
+            c1.metric("Seasons", movie['seasons'])
+            c2.metric("Episodes", movie['episodes'])
+            
+        st.divider()
+        st.subheader("📺 Where to Watch (India)")
+        if movie['ott']: st.success(f"Available on: {', '.join(movie['ott'])}")
+        else: st.warning("Not streaming on major platforms in India right now.")
+
+    if movie['trailer_url']:
+        st.divider()
+        st.subheader("🎥 Official Trailer")
+        st.video(movie['trailer_url'])
+
+# --- MAIN APP ---
+if st.session_state.selected_movie:
+    show_details_page()
+else:
+    st.title("🍿 AI Entertainment Hub")
+    
+    # DYNAMIC CHIPS
+    cols = st.columns(4)
+    query_input = None
+    for i, prompt in enumerate(st.session_state.chips):
+        with cols[i]:
+            if st.button(prompt, use_container_width=True):
+                query_input = prompt
+
+    # HISTORY
+    for msg_idx, msg in enumerate(st.session_state.history):
+        with st.chat_message(msg["role"]):
+            if msg["type"] == "text":
+                st.markdown(msg["content"])
+            elif msg["type"] == "grid":
+                cols = st.columns(5)
+                for item_idx, item in enumerate(msg["content"]):
+                    with cols[item_idx % 5]:
+                        st.image(item['poster_url'], use_container_width=True)
+                        
+                        type_icon = "📺" if item['type'] == 'tv' else "🎬"
+                        st.markdown(f"<div class='type-icon'>{type_icon} {item['type'].upper()}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
+                        
+                        if st.button("View Details", key=f"btn_{msg_idx}_{item['id']}_{item_idx}"):
+                            full_details = tools.get_media_details(item['id'], item['type'])
+                            st.session_state.selected_movie = full_details
+                            st.rerun()
+
+    # INPUT
+    if query_input:
+        user_text = query_input
+    else:
+        user_text = st.chat_input("Try: 'TV Shows like F1' or 'Comedy Anime'")
+
+    if user_text:
+        st.session_state.history.append({"role": "user", "type": "text", "content": user_text})
+        with st.chat_message("user"): st.markdown(user_text)
+        
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    tools_map = {'search_media': tools.search_media, 'get_trending': tools.get_trending, 'get_recommendations': tools.get_recommendations, 'discover_media': tools.discover_media, 'get_ai_picks': tools.get_ai_picks}
+                    
+                    response = chat.send_message(user_text)
+                    
+                    # SAFE RESPONSE HANDLING
+                    text_content = None
+                    function_call = None
+                    
+                    for part in response.candidates[0].content.parts:
+                        if part.text:
+                            text_content = part.text
+                        if part.function_call:
+                            function_call = part.function_call
+                    
+                    if text_content:
+                        st.markdown(text_content)
+                        st.session_state.history.append({"role": "assistant", "type": "text", "content": text_content})
+                    
+                    if function_call:
+                        fn_name = function_call.name
+                        fn_args = dict(function_call.args)
+                        if fn_name in tools_map:
+                            data = tools_map[fn_name](**fn_args)
+                            if data:
+                                st.session_state.history.append({"role": "assistant", "type": "grid", "content": data})
+                                chat.history.append(genai.protos.Content(parts=[genai.protos.Part(text="Grid displayed.")], role="model"))
+                                st.rerun()
+                            else: st.error("No results found. Try a simpler query.")
+                    elif not text_content:
+                        st.error("I couldn't find anything. Try again!")
+                        
+                except Exception as e:
+                    st.error(f"Oops: {str(e)}")
