@@ -244,7 +244,7 @@ def show_details_page():
         if is_in_list:
             st.button("✅ In Watchlist", disabled=True)
         else:
-            if st.button("+ Add to Watchlist"):
+            if st.button("➕ Add to Watchlist"):
                 st.session_state.watchlist.append(movie)
                 st.rerun()
 
@@ -371,6 +371,7 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
+
 
 
 
