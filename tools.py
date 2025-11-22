@@ -1,20 +1,33 @@
-# tools.py (add/replace these functions)
+"""
+tools.py
+
+TMDB helper utilities for Movie-Agent Capstone.
+- call tools.init(api_key) once from app.py
+- provides discover_media_with_filters, search_fallback, provider & genre helpers
+- defensive network handling, simple caching in-memory
+"""
+
 import requests
 import time
 import logging
+from typing import List, Optional, Dict
 
 BASE_URL = "https://api.themoviedb.org/3"
-TMDB_API_KEY = None  # set via init()
+TMDB_API_KEY: Optional[str] = None
 
 def init(api_key: str):
+    """Initialize module with TMDB API key (call from app start)."""
     global TMDB_API_KEY
     TMDB_API_KEY = api_key
 
-# safe fetch helper
-def fetch_tmdb(endpoint: str, params: dict = None, method="GET", timeout=10):
-    params = params or {}
+def _ensure_api_key():
     if not TMDB_API_KEY:
-        raise RuntimeError("TMDB_API_KEY not configured. Call tools.init(api_key) first.")
+        raise RuntimeError("TMDB_API_KEY not set. Call tools.init(api_key) first.")
+
+# --- safe TMDB fetch helper
+def fetch_tmdb(endpoint: str, params: Dict = None, method: str = "GET", timeout: int = 10):
+    params = dict(params or {})
+    _ensure_api_key()
     params["api_key"] = TMDB_API_KEY
     url = f"{BASE_URL}{endpoint}"
     try:
@@ -22,7 +35,13 @@ def fetch_tmdb(endpoint: str, params: dict = None, method="GET", timeout=10):
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.HTTPError as e:
-        logging.warning(f"[TMDB] HTTP error {resp.status_code} for {url} : {resp.text}")
+        try:
+            status = resp.status_code
+            text = resp.text
+        except Exception:
+            status = "?"
+            text = str(e)
+        logging.warning(f"[TMDB] HTTP error {status} for {url} : {text}")
         return {}
     except requests.exceptions.RequestException as e:
         logging.warning(f"[TMDB] Request error for {url} : {e}")
@@ -31,15 +50,19 @@ def fetch_tmdb(endpoint: str, params: dict = None, method="GET", timeout=10):
         logging.warning(f"[TMDB] Invalid JSON from {url}")
         return {}
 
-# cache provider mapping in memory
+# --- provider and genre caches
 _provider_cache = {"movie": None, "tv": None, "timestamp": 0}
-def get_provider_id_by_name(name: str, media_type="movie", region="IN"):
-    """Return provider id for a human name like 'netflix' or 'crunchyroll'."""
-    name_key = (name or "").strip().lower()
-    # refresh once per 24h
-    if not _provider_cache[media_type] or (time.time() - _provider_cache.get("timestamp", 0) > 24*3600):
-        endpoint = "/watch/providers/movie" if media_type=="movie" else "/watch/providers/tv"
-        resp = fetch_tmdb(endpoint, params={"language":"en-US", "page":1})
+_genre_cache = {"movie": None, "tv": None, "timestamp": 0}
+
+def get_provider_id_by_name(name: str, media_type: str = "movie", region: str = "IN"):
+    """Return provider id for a human name like 'netflix' or 'crunchyroll' or None."""
+    if not name:
+        return None
+    name_key = name.strip().lower()
+    # refresh mapping once per 24h
+    if not _provider_cache.get(media_type) or (time.time() - _provider_cache.get("timestamp", 0) > 24*3600):
+        endpoint = "/watch/providers/movie" if media_type == "movie" else "/watch/providers/tv"
+        resp = fetch_tmdb(endpoint, params={"language": "en-US", "page": 1})
         results = resp.get("results", []) if resp else []
         mapping = {}
         for p in results:
@@ -47,63 +70,68 @@ def get_provider_id_by_name(name: str, media_type="movie", region="IN"):
             mapping[provider_name] = p.get("provider_id")
         _provider_cache[media_type] = mapping
         _provider_cache["timestamp"] = time.time()
-    mapping = _provider_cache[media_type] or {}
-    # try exact then substring match
+    mapping = _provider_cache.get(media_type) or {}
+    # exact match
     if name_key in mapping:
         return mapping[name_key]
-    for k,v in mapping.items():
+    # substring match
+    for k, v in mapping.items():
         if name_key in k:
             return v
     return None
 
-# genre lookup helpers (small cache)
-_genre_cache = {"movie": {}, "tv": {}, "ts": 0}
-def ensure_genres(media_type="movie"):
-    if _genre_cache["ts"] and (time.time() - _genre_cache["ts"] < 24*3600) and _genre_cache.get(media_type):
+def ensure_genres(media_type: str = "movie"):
+    """Return dict name->id for TMDB genres for the media_type."""
+    if _genre_cache.get("timestamp") and (time.time() - _genre_cache.get("timestamp", 0) < 24*3600) and _genre_cache.get(media_type):
         return _genre_cache[media_type]
-    endpoint = "/genre/movie/list" if media_type=="movie" else "/genre/tv/list"
-    data = fetch_tmdb(endpoint, params={"language":"en-US"})
-    result = { g["name"].lower(): g["id"] for g in data.get("genres", []) } if data else {}
+    endpoint = "/genre/movie/list" if media_type == "movie" else "/genre/tv/list"
+    data = fetch_tmdb(endpoint, params={"language": "en-US"})
+    result = {g["name"].lower(): g["id"] for g in data.get("genres", [])} if data else {}
     _genre_cache[media_type] = result
-    _genre_cache["ts"] = time.time()
+    _genre_cache["timestamp"] = time.time()
     return result
 
-def normalize_item(item: dict, default_media_type="movie"):
-    """Return normalized dict with consistent keys used by app."""
+# --- normalization
+def normalize_item(item: dict, default_media_type: str = "movie"):
+    """Normalize raw TMDB item into a consistent dict used by the app."""
     media_type = item.get("media_type") or default_media_type
-    result = {
+    title = item.get("title") or item.get("name") or item.get("original_title") or item.get("original_name")
+    poster = item.get("poster_path")
+    return {
         "id": item.get("id"),
-        "title": item.get("title") or item.get("name"),
-        "poster_path": item.get("poster_path"),
+        "title": title,
+        "poster_path": poster,
         "overview": item.get("overview"),
         "release_date": item.get("release_date") or item.get("first_air_date"),
         "media_type": media_type,
         "vote_average": item.get("vote_average"),
+        "raw": item
     }
-    return result
 
-def discover_media_with_filters(media_type="movie", region="IN", max_runtime_minutes=None,
-                                provider_names=None, genres=None, language=None,
-                                original_language=None, primary_release_before=None,
-                                page=1, max_pages=1):
+# --- discover function that uses correct endpoints and filters
+def discover_media_with_filters(
+    media_type: str = "movie",
+    region: str = "IN",
+    max_runtime_minutes: Optional[int] = None,
+    provider_names: Optional[List[str]] = None,
+    genres: Optional[List[str]] = None,
+    language: Optional[str] = None,
+    original_language: Optional[str] = None,
+    primary_release_before: Optional[str] = None,
+    page: int = 1,
+    max_pages: int = 1,
+) -> List[dict]:
     """
-    Discover movies or tv shows using TMDB discover API with flexible filters.
-    - media_type: 'movie' or 'tv'
-    - provider_names: list of provider names (strings) e.g. ['netflix','crunchyroll']
-    - max_runtime_minutes: integer in minutes (applies to movies; TV uses episode runtime if supported)
-    - genres: list of genre names (strings) -> mapped to TMDB genre ids
-    - language: e.g. 'hi' (for Hindi audio) — used in result filtering (TMDB doesn't always provide dubbing info)
-    - original_language: e.g. 'ja' for Japanese (useful for anime)
-    - primary_release_before: 'YYYY-MM-DD' to only include up-to-date content
-    Returns a list of normalized items.
+    Discover movies or TV shows using TMDB discover API with flexible filters.
+    Returns list of normalized items (may be empty).
     """
     params = {
         "page": page,
         "sort_by": "popularity.desc",
         "include_adult": False,
-        "language":"en-US"
+        "language": "en-US",
     }
-    # provider ids
+    # providers -> map names to ids
     if provider_names:
         pids = []
         for p in provider_names:
@@ -114,37 +142,37 @@ def discover_media_with_filters(media_type="movie", region="IN", max_runtime_min
             params["with_watch_providers"] = ",".join(pids)
             params["watch_region"] = region
 
-    # genres mapping
+    # genres -> map to ids
     if genres:
         gmap = ensure_genres(media_type=media_type)
         gid_list = []
         for g in genres:
+            if not g:
+                continue
             gid = gmap.get(g.lower())
             if gid:
                 gid_list.append(str(gid))
         if gid_list:
             params["with_genres"] = ",".join(gid_list)
 
-    # runtime filter for movies
+    # runtime filter
     if max_runtime_minutes and media_type == "movie":
-        # TMDB supports with_runtime.lte
         params["with_runtime.lte"] = int(max_runtime_minutes)
-
-    # for TV, try episode runtime filter (not guaranteed), using with_runtime.lte as best-effort
     if max_runtime_minutes and media_type == "tv":
+        # TMDB's runtime filters for TV are not always consistent; try best-effort
         params["with_runtime.lte"] = int(max_runtime_minutes)
 
+    # release date bounds
     if primary_release_before:
         if media_type == "movie":
             params["primary_release_date.lte"] = primary_release_before
         else:
             params["first_air_date.lte"] = primary_release_before
 
-    # optional original_language filtering (useful for anime)
+    # original language
     if original_language:
         params["with_original_language"] = original_language
 
-    # call correct endpoint
     endpoint = "/discover/movie" if media_type == "movie" else "/discover/tv"
     results = []
     for p in range(page, page + max_pages):
@@ -152,22 +180,22 @@ def discover_media_with_filters(media_type="movie", region="IN", max_runtime_min
         data = fetch_tmdb(endpoint, params=params)
         if not data:
             break
-        page_results = data.get("results", [])
+        page_results = data.get("results", []) or []
         for item in page_results:
-            # extra filter: language/dub heuristics
-            # If user asked for Hindi dub specifically, TMDB does not reliably tag dubs;
-            # we can filter by 'spoken_languages' or look for 'hi' in original_language as fallback.
-            # For now, attach available spoken_languages if present (later UI can display)
-            norm = normalize_item(item, default_media_type=media_type)
-            results.append(norm)
-        # break early if single page wanted
+            results.append(normalize_item(item, default_media_type=media_type))
         if p >= data.get("total_pages", 1) or p >= page + max_pages - 1:
             break
     return results
 
-def search_fallback(query, media_type="movie"):
-    """Use TMDB search endpoint if discover returned empty or user gave explicit title."""
-    endpoint = "/search/movie" if media_type=="movie" else "/search/tv"
-    data = fetch_tmdb(endpoint, params={"query": query, "language":"en-US", "page":1})
+def search_fallback(query: str, media_type: str = "movie", max_results: int = 10) -> List[dict]:
+    """Search endpoint fallback: use when discover returns empty or when user specified a title."""
+    endpoint = "/search/movie" if media_type == "movie" else "/search/tv"
+    data = fetch_tmdb(endpoint, params={"query": query, "language": "en-US", "page": 1})
     res = data.get("results", []) if data else []
-    return [normalize_item(r, default_media_type=media_type) for r in res]
+    return [normalize_item(r, default_media_type=media_type) for r in res[:max_results]]
+
+# convenience: build poster full url
+def poster_url(poster_path: Optional[str], size: str = "w342") -> Optional[str]:
+    if not poster_path:
+        return None
+    return f"https://image.tmdb.org/t/p/{size}{poster_path}"
