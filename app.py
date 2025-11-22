@@ -316,7 +316,7 @@ else:
                     with cols[item_idx % 5]:
                         st.image(item['poster_url'], use_container_width=True)
                         
-                        type_icon = "🖥️" if item['type'] == 'tv' else "🎬"
+                        type_icon = "🖥️" if item['type'] == 'tv' else "🎞️"
                         st.markdown(f"<div class='type-icon'>{type_icon} {item['type'].upper()}</div>", unsafe_allow_html=True)
                         st.markdown(f"<div class='movie-title'>{item['title']}</div>", unsafe_allow_html=True)
                         
@@ -371,6 +371,7 @@ else:
                         
                 except Exception as e:
                     st.error(f"Oops: {str(e)}")
+
 
 
 
